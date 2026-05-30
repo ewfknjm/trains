@@ -87,6 +87,40 @@ class Spring:
         particle.add_force(force_vector)
 
 
+class Repulsion:
+    def __init__(
+        self,
+        other_pos: np.ndarray,
+        max_force: float,
+        inner_radius: float,
+        outer_radius: float,
+    ):
+        self.other_pos = other_pos
+        self.max_force = max_force
+        self.inner_radius = inner_radius
+        self.outer_radius = outer_radius
+
+    def update_force(self, particle: Particle):
+        displacement = particle.position - self.other_pos
+        distance = np.linalg.norm(displacement) - (self.inner_radius * 2)
+
+        if distance >= self.outer_radius or distance == 0:
+            return
+
+        direction = displacement / distance
+
+        if distance <= self.inner_radius:
+            falloff = 1.0
+        else:
+            falloff_range = self.outer_radius - self.inner_radius
+            distance_into_falloff = distance - self.inner_radius
+            falloff = 1.0 - (distance_into_falloff / falloff_range)
+            falloff = falloff**2
+
+        force_vector = direction * (self.max_force * falloff)
+        particle.add_force(force_vector)
+
+
 class ParticleForceRegistry:
     def __init__(self):
         self.registrations = []
