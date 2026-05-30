@@ -8,7 +8,7 @@ sphere = Entity(model="sphere")
 camera.position = (0, 0, -80)
 
 orchestrator = ParticleForceRegistry()
-fixed_point = [0.0, 20.0, 0.0]
+fixed_point = [0.0, 50.0, 0.0]
 
 object = []
 
@@ -16,7 +16,8 @@ object = []
 def update():
     dt = time.dt  # type: ignore
     orchestrator.update_forces(dt)
-    sphere.position = orchestrator.registrations[0](0).position
+    if orchestrator.registrations:
+        sphere.position = orchestrator.registrations[0][0].position
 
 
 def input(key):

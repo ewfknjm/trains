@@ -93,6 +93,7 @@ class ParticleForceRegistry:
 
     def spawn(self, fixed: list[float]):
         sphere = Particle(0.0, 0.0, 0.0)
+        sphere.set_mass(1.0)
         other = np.array(fixed, dtype="float")
 
         self.add(sphere, Gravity())
@@ -110,4 +111,10 @@ class ParticleForceRegistry:
 
     def update_forces(self, dt: float):
         for particle, force_generator in self.registrations:
-            force_generator.update_force(particle, dt)
+            force_generator.update_force(particle)
+
+        integrated_particles = set()
+        for particle, _ in self.registrations:
+            if particle not in integrated_particles:
+                particle.integrate(dt)
+                integrated_particles.add(particle)
