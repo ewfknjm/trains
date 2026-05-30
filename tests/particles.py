@@ -7,7 +7,7 @@ class Particle:
         self.position = np.array([x, y, z], dtype="float")
         self.velocity = np.zeros(3, dtype="float")
         self.acceleration = np.zeros(3, dtype="float")
-        self.inverseMass: float = 0.0
+        self.inverse_mass: float = 0.0
         self.force_accum = np.zeros(3, dtype="float")
 
     def set_mass(self, mass: float):
@@ -26,7 +26,7 @@ class Particle:
 
         self.position += self.velocity * dt
         resulting_acceleration = self.acceleration + (
-            self.force_accum * self.inverseMass
+            self.force_accum * self.inverse_mass
         )
         self.velocity += resulting_acceleration * dt
 
@@ -41,14 +41,14 @@ class ForceGenerator(Protocol):
 
 
 class Gravity:
-    def __init__(self, gravity=np.array([0.0, -9.8, 0.0], dtype="float")):
+    def __init__(self, gravity=np.array([0.0, -5, 0.0], dtype="float")):
         self.gravity = gravity
 
     def update_force(self, particle: Particle):
-        if particle.inverseMass <= 0.0:
+        if particle.inverse_mass <= 0.0:
             return
 
-        particle.add_force(self.gravity / particle.inverseMass)
+        particle.add_force(self.gravity / particle.inverse_mass)
 
 
 class Drag:
@@ -90,14 +90,6 @@ class Spring:
 class ParticleForceRegistry:
     def __init__(self):
         self.registrations = []
-
-    def spawn(self, fixed: list[float]):
-        sphere = Particle(0.0, 0.0, 0.0)
-        sphere.set_mass(1.0)
-        other = np.array(fixed, dtype="float")
-
-        self.add(sphere, Gravity())
-        self.add(sphere, Spring(other, 2.0, 10.0))
 
     def add(self, particle: Particle, force_generator: ForceGenerator):
         self.registrations.append((particle, force_generator))
