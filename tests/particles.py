@@ -1,7 +1,6 @@
-import random
-import math
 import numpy as np
 from typing import Protocol
+from dataclasses import dataclass
 
 
 class Particle:
@@ -43,183 +42,189 @@ class Particle:
         self.force_accum.fill(0.0)
 
 
-class ForceGenerator(Protocol):
-    def update_force(self, particle: Particle): ...
-
-
-class Gravity:
-    def __init__(self, gravity=np.array([0.0, -5, 0.0], dtype="float")):
-        self.gravity = gravity
-
-    def update_force(self, particle: Particle):
-        if particle.inverse_mass <= 0.0:
-            return
-
-        particle.add_force(self.gravity / particle.inverse_mass)
-
-
-class Drag:
-    def __init__(self, k1: float = 0.1, k2: float = 0.01):
-        self.k1 = k1
-        self.k2 = k2
-
-    def update_force(self, particle: Particle):
-        velocity = particle.velocity
-        speed = np.linalg.norm(velocity)
-        if speed == 0:
-            return
-
-        drag_magnitude = (self.k1 * speed) + (self.k2 * speed * speed)
-        drag_force = -drag_magnitude * (velocity / speed)
-        particle.add_force(drag_force)
-
-
-class Spring:
-    def __init__(self, other: np.ndarray, k: float = 0.0, a: float = 0.0):
-        self.k = k
-        self.a = a
-        self.other = other
-
-    def update_force(self, particle: Particle):
-        displacement = particle.position - self.other
-        distance = np.linalg.norm(displacement)
-
-        if distance == 0:
-            return
-
-        direction = displacement / distance
-        force_magnitude = -self.k * (distance - self.a)
-        force_vector = direction * force_magnitude
-
-        particle.add_force(force_vector)
-
-
-class Repulsion:
+class ParticleContact:
     def __init__(
         self,
-        other_pos: np.ndarray,
-        max_force: float,
-        inner_radius: float,
-        outer_radius: float,
+        particle_a: Particle,
+        particle_b: Particle,
+        restitution: float,
+        contact_normal: np.ndarray,
+        penetration_depth: float,
     ):
-        self.other_pos = other_pos
-        self.max_force = max_force
-        self.inner_radius = inner_radius
-        self.outer_radius = outer_radius
+        if restitution < 0:
+            raise ValueError("restitution must be above 0")
+        norm = np.linalg.norm(contact_normal)
+        if norm == 0:
+            raise ValueError("contact_normal cannot be a zero vector")
+        self.particle_a = particle_a
+        self.particle_b = particle_b
+        self.restitution = restitution
+        self.contact_normal = contact_normal / norm
+        self.penetration_depth = penetration_depth
 
-    def update_force(self, particle: Particle):
-        displacement = particle.position - self.other_pos
-        distance = np.linalg.norm(displacement) - (self.inner_radius * 2)
+    @staticmethod
+    def calculate_closing_velocity(
+        particle_a_velocity: np.ndarray,
+        particle_b_velocity: np.ndarray,
+        contact_normal: np.ndarray,
+    ):
+        return np.dot((particle_a_velocity - particle_b_velocity), contact_normal)
 
-        if distance >= self.outer_radius or distance == 0:
+    def resolve_impulse(self, dt: float):
+        contact_normal = self.contact_normal
+        particle_a = self.particle_a
+        particle_b = self.particle_b
+        closing_velocity = self.calculate_closing_velocity(
+            particle_a.velocity, particle_b.velocity, contact_normal
+        )
+
+        if closing_velocity > 0:
             return
 
-        direction = displacement / distance
+        opening_velocity = -self.restitution * closing_velocity
 
-        if distance <= self.inner_radius:
-            falloff = 1.0
-        else:
-            falloff_range = self.outer_radius - self.inner_radius
-            distance_into_falloff = distance - self.inner_radius
-            falloff = 1.0 - (distance_into_falloff / falloff_range)
-            falloff = falloff**2
+        rel_accel_induced_vel = 0.0
+        rel_accel_induced_vel = particle_a.acceleration
+        rel_accel_induced_vel -= particle_b.acceleration
+        rel_accel_induced_vel = np.dot(rel_accel_induced_vel, contact_normal) * dt
 
-        force_vector = direction * (self.max_force * falloff)
-        particle.add_force(force_vector)
+        if rel_accel_induced_vel < 0.0:
+            opening_velocity = max(
+                0.0, opening_velocity + self.restitution * rel_accel_induced_vel
+            )
+
+        delta_velocity = opening_velocity - closing_velocity
+
+        total_inverse_sum = particle_a.inverse_mass + particle_b.inverse_mass
+        if total_inverse_sum == 0:
+            return
+
+        impulse = (delta_velocity / total_inverse_sum) * contact_normal
+
+        particle_a.velocity += particle_a.inverse_mass * impulse
+        particle_b.velocity += particle_b.inverse_mass * -impulse
+
+    def resolve_interpenetration(self):
+        depth = self.penetration_depth
+        if depth <= 0:
+            return
+        particle_a = self.particle_a
+        particle_b = self.particle_b
+
+        total_inverse_sum = particle_a.inverse_mass + particle_b.inverse_mass
+
+        if total_inverse_sum <= 0:
+            return
+
+        particle_a_movement = (
+            depth
+            * self.contact_normal
+            * (1.0 / total_inverse_sum)
+            * particle_a.inverse_mass
+        )
+        particle_b_movement = (
+            depth
+            * self.contact_normal
+            * (1.0 / total_inverse_sum)
+            * particle_b.inverse_mass
+            * -1.0
+        )
+
+        particle_a.position += particle_a_movement
+        particle_b.position += particle_b_movement
 
 
-class WanderForce:
-    def __init__(self, magnitude: float = 10.0, frequency: float = 1.0):
-        self.magnitude = magnitude
-        self.frequency = frequency
-        self.seed_x = random.uniform(0, 1000)
-        self.seed_y = random.uniform(0, 1000)
-        self.seed_z = random.uniform(0, 1000)
-        self.time_accum = 0.0
-
-    def update_force(self, particle: Particle):
-        self.time_accum += 0.016
-
-        fx = (
-            math.sin((self.time_accum * self.frequency) + self.seed_x) * self.magnitude
-        )  # not my idea
-        fy = (
-            math.cos((self.time_accum * self.frequency) + self.seed_y) * self.magnitude
-        )  # increasing the frequency decreases the wavelength of the graphs
-        fz = (
-            math.sin((self.time_accum * self.frequency) + self.seed_z) * self.magnitude
-        )  # making the force more 'jittery'
-
-        force = (
-            np.array([fx, fy, fz], dtype="float") * self.magnitude
-        )  # the seed shifts each function by a random amount, so the graphs hardly overlap and produce the same output
-        particle.add_force(
-            force
-        )  # magnitude just amps up the force, because sin and cos [-1,1]
+class ContactGenerator(Protocol):
+    def add_contact(self) -> ParticleContact | None: ...
 
 
-class Attractor:
+class SphereContactGenerator:
     def __init__(
-        self, other: Particle, modulusE: float, trail_length: float, time_buffer: float
+        self,
+        particle_a: Particle,
+        particle_b: Particle,
+        radius_a: float,
+        radius_b: float,
+        restitution: float,
     ):
-        self.other = other
-        self.modulus_e = modulusE
-        self.trail_length = trail_length
-        self.time_buffer = time_buffer  # time buffer is dt + time skipped
+        self.particle_a = particle_a
+        self.particle_b = particle_b
+        self.radius_a = radius_a
+        self.radius_b = radius_b
+        self.restitution = restitution
 
-    def calculateTension(
-        self, bullet_position: np.ndarray, target_position: np.ndarray
+    def add_contact(self) -> ParticleContact | None:
+        diff = self.particle_a.position - self.particle_b.position
+        distance = np.linalg.norm(diff)
+        combined_radius = self.radius_a + self.radius_b
+
+        if distance >= combined_radius:
+            return None  # no contact, nothing to add
+
+        contact_normal = diff / distance
+        penetration_depth = combined_radius - distance
+
+        return ParticleContact(
+            self.particle_a,
+            self.particle_b,
+            self.restitution,
+            contact_normal,
+            float(penetration_depth),
+        )
+
+
+@dataclass
+class CableContactGenerator:
+    particle_a: Particle
+    particle_b: Particle
+    restitution: float
+    max_length: float
+
+    @staticmethod
+    def calculate_current_length(
+        particle_a_position: np.ndarray, particle_b_position: np.ndarray
     ):
-        displacement = bullet_position - target_position
-        distance = np.linalg.norm(displacement)
+        return np.linalg.norm(particle_a_position - particle_b_position)
 
-        if distance == 0 or distance <= self.trail_length:
-            return np.zeros(3)
+    def add_contact(self) -> ParticleContact | None:
+        a = self.particle_a
+        b = self.particle_b
 
-        direction = displacement / distance
+        length = self.calculate_current_length(a.position, b.position)
+        if length <= self.max_length:
+            return
 
-        tension_magnitude = -self.modulus_e * (distance - self.trail_length)
-        tension = tension_magnitude * direction
-        return tension
+        penetration = length - self.max_length
+        rel_vec = b.position - a.position
+        contact_normal = rel_vec / length
 
-    def update_force(self, particle: Particle):
-        bullet_position = particle.position.copy()
-
-        bullet_position += (
-            (particle.velocity * self.time_buffer)
-            + 0.5 * particle.acceleration * self.time_buffer** 2
-        )  # predicted future position based on current velocity
-
-        target_position = self.other.position.copy()
-
-        target_position += (
-            self.other.velocity * self.time_buffer
-            + 0.5 * self.other.acceleration * self.time_buffer**2
-        )  # predicted future position based on current velocity, consider both bullet and target for accelerations
-
-        particle.add_force(self.calculateTension(bullet_position, target_position))
+        return ParticleContact(
+            a, b, self.restitution, contact_normal, float(penetration)
+        )
 
 
-class ParticleForceRegistry:
-    def __init__(self):
-        self.registrations = []
+class ParticleContactResolver:
+    def __init__(self, iterations: int):
+        self.iterations = iterations
 
-    def add(self, particle: Particle, force_generator: ForceGenerator):
-        self.registrations.append((particle, force_generator))
+    def resolve_contacts(self, contacts: list[ParticleContact], dt: float):
+        iterations_used = 0
+        while iterations_used < self.iterations:
+            min_velocity = 0.0
+            chosen = None
+            for contact in contacts:
+                cv = ParticleContact.calculate_closing_velocity(
+                    contact.particle_a.velocity,
+                    contact.particle_b.velocity,
+                    contact.contact_normal,
+                )
+                if cv < min_velocity:
+                    min_velocity = cv
+                    chosen = contact
 
-    def remove(self, particle: Particle, force_generator: ForceGenerator):
-        if (particle, force_generator) in self.registrations:
-            self.registrations.remove((particle, force_generator))
+            if chosen is None:
+                break
 
-    def clear(self):
-        self.registrations.clear()
-
-    def update_forces(self, dt: float):
-        for particle, force_generator in self.registrations:
-            force_generator.update_force(particle)
-
-        integrated_particles = set()
-        for particle, _ in self.registrations:
-            if particle not in integrated_particles:
-                particle.integrate(dt)
-                integrated_particles.add(particle)
+            chosen.resolve_impulse(dt)
+            chosen.resolve_interpenetration()
+            iterations_used += 1
