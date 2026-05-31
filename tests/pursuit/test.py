@@ -22,8 +22,8 @@ def spawn_bullet_target():
     bullet_model = Entity(model="sphere")
     target_model = Entity(model="sphere", color=color.red)
 
-    bullet.set_mass(1.0)
-    target.set_mass(1.0)
+    bullet.mass = 1.0
+    target.mass = 1.0
     bullet.velocity = np.array([5.0, 0.0, 0.0], dtype="float")
     target.velocity = np.array([0.0, 0.0, 0.0], dtype="float")
 

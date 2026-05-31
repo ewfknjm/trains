@@ -9,15 +9,20 @@ class Particle:
         self.position = np.array([x, y, z], dtype="float")
         self.velocity = np.zeros(3, dtype="float")
         self.acceleration = np.zeros(3, dtype="float")
+        self._mass = 0.0
         self.inverse_mass: float = 0.0
         self.force_accum = np.zeros(3, dtype="float")
 
-    def set_mass(self, mass: float):
-        if mass <= 0:
-            self.inverse_mass = 0.0
+    @property
+    def mass(self):
+        return self._mass
 
-        else:
-            self.inverse_mass = 1.0 / mass
+    @mass.setter
+    def mass(self, value: float):
+        if value <= 0:
+            raise ValueError()
+        self._mass = value
+        self.inverse_mass = 1.0 / value
 
     def add_force(self, force: np.ndarray):
         self.force_accum += force
@@ -124,7 +129,7 @@ class Repulsion:
 
 
 class WanderForce:
-    def __init__(self, magnitude: float = 9.0, frequency: float = 2.0):
+    def __init__(self, magnitude: float = 10.0, frequency: float = 1.0):
         self.magnitude = magnitude
         self.frequency = frequency
         self.seed_x = random.uniform(0, 1000)
@@ -168,6 +173,9 @@ class Attractor:
         displacement = bullet_position - target_position
         distance = np.linalg.norm(displacement)
 
+        if distance == 0 or distance <= self.trail_length:
+            return np.zeros(3)
+
         direction = displacement / distance
 
         tension_magnitude = -self.modulus_e * (distance - self.trail_length)
@@ -176,17 +184,17 @@ class Attractor:
 
     def update_force(self, particle: Particle):
         bullet_position = particle.position.copy()
-        bullet_velocity = particle.velocity.copy()
 
         bullet_position += (
-            bullet_velocity * self.time_buffer
-        )  # predicted future position based on current velocity, no acceleration taken into account
+            (particle.velocity * self.time_buffer)
+            + 0.5 * particle.acceleration * self.time_buffer** 2
+        )  # predicted future position based on current velocity
 
         target_position = self.other.position.copy()
-        target_velocity = self.other.velocity.copy()
 
         target_position += (
-            target_velocity * self.time_buffer
+            self.other.velocity * self.time_buffer
+            + 0.5 * self.other.acceleration * self.time_buffer**2
         )  # predicted future position based on current velocity, consider both bullet and target for accelerations
 
         particle.add_force(self.calculateTension(bullet_position, target_position))
