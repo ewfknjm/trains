@@ -1,3 +1,5 @@
+import random
+import math
 import numpy as np
 from typing import Protocol
 
@@ -119,6 +121,75 @@ class Repulsion:
 
         force_vector = direction * (self.max_force * falloff)
         particle.add_force(force_vector)
+
+
+class WanderForce:
+    def __init__(self, magnitude: float = 9.0, frequency: float = 2.0):
+        self.magnitude = magnitude
+        self.frequency = frequency
+        self.seed_x = random.uniform(0, 1000)
+        self.seed_y = random.uniform(0, 1000)
+        self.seed_z = random.uniform(0, 1000)
+        self.time_accum = 0.0
+
+    def update_force(self, particle: Particle):
+        self.time_accum += 0.016
+
+        fx = (
+            math.sin((self.time_accum * self.frequency) + self.seed_x) * self.magnitude
+        )  # not my idea
+        fy = (
+            math.cos((self.time_accum * self.frequency) + self.seed_y) * self.magnitude
+        )  # increasing the frequency decreases the wavelength of the graphs
+        fz = (
+            math.sin((self.time_accum * self.frequency) + self.seed_z) * self.magnitude
+        )  # making the force more 'jittery'
+
+        force = (
+            np.array([fx, fy, fz], dtype="float") * self.magnitude
+        )  # the seed shifts each function by a random amount, so the graphs hardly overlap and produce the same output
+        particle.add_force(
+            force
+        )  # magnitude just amps up the force, because sin and cos [-1,1]
+
+
+class Attractor:
+    def __init__(
+        self, other: Particle, modulusE: float, trail_length: float, time_buffer: float
+    ):
+        self.other = other
+        self.modulus_e = modulusE
+        self.trail_length = trail_length
+        self.time_buffer = time_buffer  # time buffer is dt + time skipped
+
+    def calculateTension(
+        self, bullet_position: np.ndarray, target_position: np.ndarray
+    ):
+        displacement = bullet_position - target_position
+        distance = np.linalg.norm(displacement)
+
+        direction = displacement / distance
+
+        tension_magnitude = -self.modulus_e * (distance - self.trail_length)
+        tension = tension_magnitude * direction
+        return tension
+
+    def update_force(self, particle: Particle):
+        bullet_position = particle.position.copy()
+        bullet_velocity = particle.velocity.copy()
+
+        bullet_position += (
+            bullet_velocity * self.time_buffer
+        )  # predicted future position based on current velocity, no acceleration taken into account
+
+        target_position = self.other.position.copy()
+        target_velocity = self.other.velocity.copy()
+
+        target_position += (
+            target_velocity * self.time_buffer
+        )  # predicted future position based on current velocity, consider both bullet and target for accelerations
+
+        particle.add_force(self.calculateTension(bullet_position, target_position))
 
 
 class ParticleForceRegistry:
