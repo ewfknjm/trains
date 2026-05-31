@@ -173,6 +173,12 @@ class SphereContactGenerator:
         )
 
 
+def calculate_current_length(
+    particle_a_position: np.ndarray, particle_b_position: np.ndarray
+):
+    return np.linalg.norm(particle_a_position - particle_b_position)
+
+
 @dataclass
 class CableContactGenerator:
     particle_a: Particle
@@ -180,17 +186,11 @@ class CableContactGenerator:
     restitution: float
     max_length: float
 
-    @staticmethod
-    def calculate_current_length(
-        particle_a_position: np.ndarray, particle_b_position: np.ndarray
-    ):
-        return np.linalg.norm(particle_a_position - particle_b_position)
-
     def add_contact(self) -> ParticleContact | None:
         a = self.particle_a
         b = self.particle_b
 
-        length = self.calculate_current_length(a.position, b.position)
+        length = calculate_current_length(a.position, b.position)
         if length <= self.max_length:
             return
 
@@ -201,6 +201,32 @@ class CableContactGenerator:
         return ParticleContact(
             a, b, self.restitution, contact_normal, float(penetration)
         )
+
+
+@dataclass
+class RodContactGenerator:
+    particle_a: Particle
+    particle_b: Particle
+    max_length: float
+
+    def add_contact(self) -> ParticleContact | None:
+        a = self.particle_a
+        b = self.particle_b
+
+        length = calculate_current_length(a.position, b.position)
+        if length == self.max_length:
+            return None
+
+        rel_vec = b.position - a.position
+        contact_normal = rel_vec / length
+
+        if length > self.max_length:
+            penetration = length - self.max_length
+        else:
+            contact_normal *= -1.0
+            penetration = self.max_length - length
+
+        return ParticleContact(a, b, 0.0, contact_normal, float(penetration))
 
 
 class ParticleContactResolver:
