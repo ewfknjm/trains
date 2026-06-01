@@ -31,10 +31,16 @@ class ParticleWorld:
             particle.integrate(dt)
 
     def run_physics(self, dt: float):
+        self.start_frame()
         self.force_registry.update_forces(dt)
         self.integrate(dt)
 
         contact_register = self.contact_registrations.contact_register
-        resolver = ParticleContactResolver(len(contact_register) * 2)
+        contacts = []
+        for generator in contact_register:
+            contact = generator.add_contact()
+            if contact is not None:
+                contacts.append(contact)
+        resolver = ParticleContactResolver(len(contacts) * 2)
 
-        resolver.resolve_contacts(contact_register, dt)
+        resolver.resolve_contacts(contacts, dt)

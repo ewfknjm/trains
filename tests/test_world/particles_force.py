@@ -13,7 +13,7 @@ class Gravity:
     def __init__(self, gravity=np.array([0.0, -5, 0.0], dtype="float")):
         self.gravity = gravity
 
-    def update_force(self, particle: Particle):
+    def update_force(self, particle: Particle, dt: float):
         if particle.inverse_mass <= 0.0:
             return
 
@@ -25,7 +25,7 @@ class Drag:
         self.k1 = k1
         self.k2 = k2
 
-    def update_force(self, particle: Particle):
+    def update_force(self, particle: Particle, dt: float):
         velocity = particle.velocity
         speed = np.linalg.norm(velocity)
         if speed == 0:
@@ -42,7 +42,7 @@ class Spring:
         self.a = a
         self.other = other
 
-    def update_force(self, particle: Particle):
+    def update_force(self, particle: Particle, dt: float):
         displacement = particle.position - self.other
         distance = np.linalg.norm(displacement)
 
@@ -69,7 +69,7 @@ class Repulsion:
         self.inner_radius = inner_radius
         self.outer_radius = outer_radius
 
-    def update_force(self, particle: Particle):
+    def update_force(self, particle: Particle, dt: float):
         displacement = particle.position - self.other_pos
         distance = np.linalg.norm(displacement) - (self.inner_radius * 2)
 
@@ -99,8 +99,8 @@ class WanderForce:
         self.seed_z = random.uniform(0, 1000)
         self.time_accum = 0.0
 
-    def update_force(self, particle: Particle):
-        self.time_accum += 0.016
+    def update_force(self, particle: Particle, dt: float):
+        self.time_accum += dt
 
         fx = (
             math.sin((self.time_accum * self.frequency) + self.seed_x) * self.magnitude
@@ -122,12 +122,17 @@ class WanderForce:
 
 class Attractor:
     def __init__(
-        self, other: Particle, modulusE: float, trail_length: float, time_buffer: float
+        self,
+        other: Particle,
+        modulusE: float,
+        trail_length: float,
+        time_look_ahead: float,
     ):
         self.other = other
         self.modulus_e = modulusE
         self.trail_length = trail_length
-        self.time_buffer = time_buffer  # time buffer is dt + time skipped
+        self.time_look_ahead = time_look_ahead
+        # time buffer is dt + time skipped
 
     def calculateTension(
         self, bullet_position: np.ndarray, target_position: np.ndarray
@@ -144,19 +149,20 @@ class Attractor:
         tension = tension_magnitude * direction
         return tension
 
-    def update_force(self, particle: Particle):
+    def update_force(self, particle: Particle, dt: float):
         bullet_position = particle.position.copy()
+        total_projection_time = self.time_look_ahead + dt
 
         bullet_position += (
-            (particle.velocity * self.time_buffer)
-            + 0.5 * particle.acceleration * self.time_buffer** 2
+            (particle.velocity * total_projection_time)
+            + 0.5 * particle.acceleration * total_projection_time** 2
         )  # predicted future position based on current velocity
 
         target_position = self.other.position.copy()
 
         target_position += (
-            self.other.velocity * self.time_buffer
-            + 0.5 * self.other.acceleration * self.time_buffer**2
+            self.other.velocity * total_projection_time
+            + 0.5 * self.other.acceleration * total_projection_time**2
         )  # predicted future position based on current velocity, consider both bullet and target for accelerations
 
         particle.add_force(self.calculateTension(bullet_position, target_position))

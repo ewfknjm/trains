@@ -69,7 +69,7 @@ class ParticleContact:
     def calculate_position_correction(self) -> Tuple:
         depth = self.penetration_depth
         if depth <= 0:
-            return (0, 0)
+            return (np.zeros(3), np.zeros(3))
         particle_a = self.particle_a
         particle_b = self.particle_b
 
@@ -244,7 +244,7 @@ class ParticleContactResolver:
                 )
                 if other_contact.particle_a is chosen.particle_a:
                     other_contact.penetration_depth -= a_delta_displacement
-                if other_contact.particle_b is chosen.particle_b:
+                if other_contact.particle_b is chosen.particle_a:
                     other_contact.penetration_depth += a_delta_displacement
 
                 b_delta_displacement = np.dot(

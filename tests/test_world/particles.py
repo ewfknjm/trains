@@ -6,8 +6,8 @@ class Particle:
         self.position = np.array([x, y, z], dtype="float")
         self.velocity = np.zeros(3, dtype="float")
         self.acceleration = np.zeros(3, dtype="float")
-        self._mass = 0.0
-        self.inverse_mass: float = 0.0
+        self._mass = 1.0
+        self.inverse_mass: float = 1.0
         self.force_accum = np.zeros(3, dtype="float")
 
     @property
