@@ -182,4 +182,3 @@ def update():
 
 
 app.run()  # type: ignore
-
