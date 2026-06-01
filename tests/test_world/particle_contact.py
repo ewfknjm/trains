@@ -46,8 +46,7 @@ class ParticleContact:
         opening_velocity = -self.restitution * closing_velocity
 
         rel_accel_induced_vel = 0.0
-        rel_accel_induced_vel = particle_a.acceleration
-        rel_accel_induced_vel -= particle_b.acceleration
+        rel_accel_induced_vel = particle_a.acceleration - particle_b.acceleration
         rel_accel_induced_vel = np.dot(rel_accel_induced_vel, contact_normal) * dt
 
         if rel_accel_induced_vel < 0.0:
@@ -140,8 +139,12 @@ class CableContactGenerator:
 
         rel_vec = b.position - a.position
         length = np.linalg.norm(rel_vec)
+
+        if length == 0:
+            return None
+
         if length <= self.max_length:
-            return
+            return None
 
         penetration = length - self.max_length
         contact_normal = rel_vec / length
@@ -163,6 +166,9 @@ class RodContactGenerator:
 
         rel_vec = b.position - a.position
         length = np.linalg.norm(rel_vec)
+
+        if length == 0:
+            return None
 
         if length == self.max_length:
             return None
@@ -236,9 +242,6 @@ class ParticleContactResolver:
             chosen.particle_b.position += pos_correction[1]
 
             for other_contact in contacts:
-                if other_contact is chosen:
-                    continue
-
                 a_delta_displacement = np.dot(
                     pos_correction[0], other_contact.contact_normal
                 )
