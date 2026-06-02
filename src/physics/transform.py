@@ -1,5 +1,5 @@
 import numpy as np
-from quaternions import Quaternion
+from .quaternions import Quaternion
 
 
 class Transform4x4:

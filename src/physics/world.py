@@ -1,7 +1,7 @@
 import numpy as np
-from force_generators import ForceGenerator
-from force_registry import ForceRegistry
-from rigidbody import RigidBody
+from .force_generators import ForceGenerator
+from .force_registry import ForceRegistry
+from .rigidbody import RigidBody
 
 
 class World:

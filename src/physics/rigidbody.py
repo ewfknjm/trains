@@ -1,6 +1,6 @@
 import numpy as np
-from quaternions import Quaternion
-from transform import Transform4x4
+from .quaternions import Quaternion
+from .transform import Transform4x4
 
 
 class RigidBody:

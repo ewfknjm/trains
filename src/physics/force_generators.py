@@ -1,7 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
-from rigidbody import RigidBody
-from transform import Transform4x4
+from .rigidbody import RigidBody
+from .transform import Transform4x4
 
 
 class ForceGenerator(ABC):
