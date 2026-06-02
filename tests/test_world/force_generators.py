@@ -1,11 +1,7 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from rigidbody import RigidBody
-from matrix import Transform4x4
-
-
-# Disclaimer
-# The force register (if implemented) may have None in it
+from transform import Transform4x4
 
 
 class ForceGenerator(ABC):
@@ -18,7 +14,7 @@ class Gravity(ForceGenerator):
         self.gravity = np.array([0, -9.81, 0], dtype="float")
 
     def update_force(self, body: RigidBody, dt: float) -> None:
-        if np.isclose(body.mass, 0.0):
+        if np.isclose(body.inverse_mass, 0.0):
             raise ValueError("Mass is not finite")
 
         body.add_force(self.gravity * body.mass)
@@ -57,7 +53,7 @@ class Spring(ForceGenerator):
             return
 
         direction = displacement / distance
-        magnitude = -self.spring_constant * abs(distance - self.natural_length)
+        magnitude = -self.spring_constant * (distance - self.natural_length)
         force = magnitude * direction
 
         body.add_force(force)

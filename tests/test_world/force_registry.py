@@ -1,5 +1,5 @@
 from rigidbody import RigidBody
-from rb_force_gen import ForceGenerator
+from force_generators import ForceGenerator
 from dataclasses import dataclass
 
 

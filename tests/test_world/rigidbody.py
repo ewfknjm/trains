@@ -1,6 +1,6 @@
 import numpy as np
 from quaternions import Quaternion
-from matrix import Transform4x4
+from transform import Transform4x4
 
 
 class RigidBody:
@@ -11,14 +11,14 @@ class RigidBody:
         self.rotation = np.zeros(3, dtype="float")
         self._mass = 1.0
         self.inverse_mass: float = 1.0
-        self.linearDamping: float = 1.0
+        self.linear_damping: float = 1.0
         self._orientation = Quaternion(1, 0, 0, 0)
         self._transform_matrix = np.eye(
             4
         )  # derive from orientation and position once per frame
         self._inertia_tensor: np.ndarray = np.zeros((3, 3), dtype="float")
-        self.inver_inertia_tensor: np.ndarray = np.zeros((3, 3), dtype="float")
-        self._inver_inertia_tensor_world: np.ndarray = np.zeros((3, 3), dtype="float")
+        self.inverse_inertia_tensor: np.ndarray = np.zeros((3, 3), dtype="float")
+        self._inverse_inertia_tensor_world: np.ndarray = np.zeros((3, 3), dtype="float")
         self.force_accum: np.ndarray = np.zeros(3, dtype="float")
         self.torque_accum: np.ndarray = np.zeros(3, dtype="float")
         self._dirty = True
@@ -30,7 +30,7 @@ class RigidBody:
     @inertia_tensor.setter
     def inertia_tensor(self, inertia_tensor: np.ndarray):
         self._inertia_tensor = inertia_tensor
-        self.inver_inertia_tensor = np.linalg.inv(inertia_tensor)
+        self.inverse_inertia_tensor = np.linalg.inv(inertia_tensor)
         self._dirty = True
 
     @property
@@ -61,12 +61,12 @@ class RigidBody:
         self._transform_matrix = np.eye(4)
         self._transform_matrix[:3, :3] = self._orientation.to_rotation_matrix()
         self._transform_matrix[:3, 3] = self.position
-        self._recalculate_inver_inertia_tensor_world()
+        self._recalculate_inverse_inertia_tensor_world()
         self._dirty = False
 
-    def _recalculate_inver_inertia_tensor_world(self):
+    def _recalculate_inverse_inertia_tensor_world(self):
         M = self._transform_matrix[:3, :3]
-        self._inver_inertia_tensor_world = M @ self.inver_inertia_tensor @ M.T
+        self._inverse_inertia_tensor_world = M @ self.inverse_inertia_tensor @ M.T
 
     @property
     def mass(self):
@@ -98,23 +98,3 @@ class RigidBody:
         transform_matrix = Transform4x4(self.transform_matrix)
         pt = transform_matrix.local_to_world(point)
         self.add_force_to_point(force, pt)
-
-    def integrate(self, dt: float):
-        self.acceleration += self.force_accum * self.inverse_mass
-
-        self.velocity += self.acceleration * dt
-        self.velocity *= self.linearDamping**dt
-
-        self.position = self.position + self.velocity * dt
-
-        I_world = self._inver_inertia_tensor_world
-        gyroscopic = np.cross(self.rotation, np.linalg.solve(I_world, self.rotation))
-        angular_accel = I_world @ (self.torque_accum - gyroscopic)
-
-        self.rotation += angular_accel * dt
-        self.rotation *= self.linearDamping**dt
-
-        self._orientation.add_scaled_vector(self.rotation, dt)
-        self._dirty = True
-
-        self.clear_accum()
