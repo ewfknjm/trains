@@ -12,6 +12,7 @@ class RigidBody:
         self._mass = 1.0
         self.inverse_mass: float = 1.0
         self.linear_damping: float = 1.0
+        self.angular_damping: float = 1.0
         self._orientation = Quaternion(1, 0, 0, 0)
         self._transform_matrix = np.eye(
             4
@@ -67,6 +68,15 @@ class RigidBody:
     def _recalculate_inverse_inertia_tensor_world(self):
         M = self._transform_matrix[:3, :3]
         self._inverse_inertia_tensor_world = M @ self.inverse_inertia_tensor @ M.T
+
+    @property
+    def inverse_inertia_tensor_world(self) -> np.ndarray:
+        if self._dirty:
+            self.rebuild_transform()
+        return self._inverse_inertia_tensor_world
+
+    def mark_dirty(self):
+        self._dirty = True
 
     @property
     def mass(self):

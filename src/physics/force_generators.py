@@ -15,8 +15,7 @@ class Gravity(ForceGenerator):
 
     def update_force(self, body: RigidBody, dt: float) -> None:
         if np.isclose(body.inverse_mass, 0.0):
-            raise ValueError("Mass is not finite")
-
+            return
         body.add_force(self.gravity * body.mass)
 
 
