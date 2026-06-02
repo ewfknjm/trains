@@ -14,10 +14,19 @@ class Quaternion:
         return self
 
     def add_scaled_vector(self, vector: np.ndarray, scale: float):
-        q = Quaternion(0, *vector * scale)
-        q._r = q._r * self._r
-        wxyz = q._r.as_quat()
-        current = self._r.as_quat()
-        current += wxyz[[3, 0, 1, 2]] * 0.5
+        qx, qy, qz, qw = self._r.as_quat()
+        wx, wy, wz = np.asarray(vector, dtype=float) * scale
 
-        self._r = R.from_quat(current[[1, 2, 3, 0]])
+        dw = -(wx * qx + wy * qy + wz * qz)
+        dx = wx * qw + wy * qz - wz * qy
+        dy = wy * qw + wz * qx - wx * qz
+        dz = wz * qw + wx * qy - wy * qx
+
+        self._r = R.from_quat(
+            [
+                qx + 0.5 * dx,
+                qy + 0.5 * dy,
+                qz + 0.5 * dz,
+                qw + 0.5 * dw,
+            ]
+        )

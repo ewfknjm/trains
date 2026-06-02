@@ -11,7 +11,7 @@ class ForceRegistrant:
 
 class ForceRegistry:
     def __init__(self):
-        self.registrations = []
+        self.registrations: list[ForceRegistrant] = []
 
     def register_force_generator(
         self, body: RigidBody, force_generator: ForceGenerator

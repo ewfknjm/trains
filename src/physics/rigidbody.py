@@ -9,19 +9,25 @@ class RigidBody:
         self.velocity = np.zeros(3, dtype="float")
         self.acceleration = np.zeros(3, dtype="float")
         self.rotation = np.zeros(3, dtype="float")
+
         self._mass = 1.0
         self.inverse_mass: float = 1.0
         self.linear_damping: float = 1.0
         self.angular_damping: float = 1.0
+
         self._orientation = Quaternion(1, 0, 0, 0)
         self._transform_matrix = np.eye(
             4
         )  # derive from orientation and position once per frame
+
         self._inertia_tensor: np.ndarray = np.zeros((3, 3), dtype="float")
+        self._inertia_tensor_world: np.ndarray = np.zeros((3, 3), dtype=float)
         self.inverse_inertia_tensor: np.ndarray = np.zeros((3, 3), dtype="float")
         self._inverse_inertia_tensor_world: np.ndarray = np.zeros((3, 3), dtype="float")
+
         self.force_accum: np.ndarray = np.zeros(3, dtype="float")
         self.torque_accum: np.ndarray = np.zeros(3, dtype="float")
+
         self._dirty = True
 
     @property
@@ -33,6 +39,18 @@ class RigidBody:
         self._inertia_tensor = inertia_tensor
         self.inverse_inertia_tensor = np.linalg.inv(inertia_tensor)
         self._dirty = True
+
+    @property
+    def inertia_tensor_world(self) -> np.ndarray:
+        if self._dirty:
+            self._rebuild_derived_data()
+        return self._inertia_tensor_world
+
+    @property
+    def inverse_inertia_tensor_world(self) -> np.ndarray:
+        if self._dirty:
+            self._rebuild_derived_data()
+        return self._inverse_inertia_tensor_world
 
     @property
     def position(self) -> np.ndarray:
@@ -55,25 +73,19 @@ class RigidBody:
     @property
     def transform_matrix(self) -> np.ndarray:
         if self._dirty:
-            self.rebuild_transform()
+            self._rebuild_derived_data()
         return self._transform_matrix
 
-    def rebuild_transform(self):
+    def _rebuild_derived_data(self):
         self._transform_matrix = np.eye(4)
-        self._transform_matrix[:3, :3] = self._orientation.to_rotation_matrix()
-        self._transform_matrix[:3, 3] = self.position
-        self._recalculate_inverse_inertia_tensor_world()
-        self._dirty = False
+        M = self._orientation.to_rotation_matrix()
+        self._transform_matrix[:3, :3] = M
+        self._transform_matrix[:3, 3] = self._position
 
-    def _recalculate_inverse_inertia_tensor_world(self):
-        M = self._transform_matrix[:3, :3]
+        self._inertia_tensor_world = M @ self._inertia_tensor @ M.T
         self._inverse_inertia_tensor_world = M @ self.inverse_inertia_tensor @ M.T
 
-    @property
-    def inverse_inertia_tensor_world(self) -> np.ndarray:
-        if self._dirty:
-            self.rebuild_transform()
-        return self._inverse_inertia_tensor_world
+        self._dirty = False
 
     def mark_dirty(self):
         self._dirty = True

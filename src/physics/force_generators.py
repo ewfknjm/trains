@@ -55,4 +55,5 @@ class Spring(ForceGenerator):
         magnitude = -self.spring_constant * (distance - self.natural_length)
         force = magnitude * direction
 
-        body.add_force(force)
+        body.add_force_to_point(force, world_p1)
+        other.add_force_to_point(-force, world_p2)
