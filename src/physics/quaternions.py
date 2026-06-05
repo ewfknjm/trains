@@ -6,6 +6,22 @@ class Quaternion:
     def __init__(self, r, i, j, k):
         self._r = R.from_quat([i, j, k, r])
 
+    @property
+    def x(self):
+        return self._r.as_quat()[0]
+
+    @property
+    def y(self):
+        return self._r.as_quat()[1]
+
+    @property
+    def z(self):
+        return self._r.as_quat()[2]
+
+    @property
+    def w(self):
+        return self._r.as_quat()[3]
+
     def to_rotation_matrix(self) -> np.ndarray:
         return self._r.as_matrix()
 
