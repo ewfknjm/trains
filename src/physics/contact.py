@@ -205,9 +205,7 @@ class CollisionDetector:
 
             penetration = plane.scalar_offset - vertex_distance
             normal = plane.normal
-            contact_point = world_position + (
-                plane.normal * (vertex_distance - plane.scalar_offset)
-            )
+            contact_point = world_position + (plane.normal * penetration)
             contacts_used += 1
             data.contacts.append(
                 Contact(
@@ -227,7 +225,7 @@ class CollisionDetector:
             raise ValueError("box is not defined with half_size")
 
         world_sphere_center = sphere.get_axis(3)
-        box_transform = Transform4x4(box.body.transform_matrix)
+        box_transform = Transform4x4(box.get_transform())
         box_sphere_center = box_transform.world_to_local(world_sphere_center)
 
         if np.any(np.abs(box_sphere_center) - sphere.radius > box.half_size):
@@ -240,7 +238,7 @@ class CollisionDetector:
 
         world_closest_pt = box_transform.local_to_world(closest_pt)
 
-        direction = world_sphere_center - world_closest_pt
+        direction = world_closest_pt - world_sphere_center
         magnitude = np.linalg.norm(direction)
         if np.isclose(magnitude, 0.0):
             distances_to_face = box.half_size - np.abs(box_sphere_center)
@@ -272,8 +270,10 @@ class CollisionDetector:
             return
 
         center_difference_vector = box_two.get_axis(3) - box_one.get_axis(3)
-        one_axes = box_one.get_transform()[:3, :3].T
-        two_axes = box_two.get_transform()[:3, :3].T
+        box_one_transform = box_one.get_transform()
+        box_two_transform = box_two.get_transform()
+        one_axes = box_one_transform[:3, :3].T
+        two_axes = box_two_transform[:3, :3].T
         face_axes = np.vstack([one_axes, two_axes])
         cross_grid = np.cross(one_axes[:, np.newaxis, :], two_axes[np.newaxis, :, :])
         edge_axes = cross_grid.reshape(9, 3)
@@ -295,7 +295,7 @@ class CollisionDetector:
 
         mask = np.where(valid, penetrations, np.inf)
         best_index = int(np.argmin(mask))
-        penetration = float(mask[best_index])
+        penetration = penetrations[best_index]
         best_single_axis_index = int(np.argmin(mask[:6]))
 
         is_edge_axis = best_index >= 6
@@ -305,24 +305,21 @@ class CollisionDetector:
         if is_edge_axis and (is_barely_better or is_nearly_parallel):
             best_index = best_single_axis_index
 
+        normal = normalized_axes[best_index]
+        if center_projection[best_index] > 0:
+            normal = -normal
+
         if best_index < 6:
-            normal = normalized_axes[best_index]
-
-            if center_projection[best_index] < 0:
-                normal = -normal
-
             if best_index < 3:
                 reference_box = box_one
                 incident_box = box_two
                 reference_axis_index = best_index
-                reference_outwards_normal = normal
-                flip_contact_normal = 1.0
+                reference_outwards_normal = -normal
             else:
                 reference_box = box_two
                 incident_box = box_one
                 reference_axis_index = best_index - 3
-                reference_outwards_normal = -normal
-                flip_contact_normal = -1.0
+                reference_outwards_normal = normal
 
             incident_face = Sutherland_Hodgman.get_incident_face_vertices(
                 incident_box, reference_outwards_normal
@@ -331,12 +328,59 @@ class CollisionDetector:
                 reference_box,
                 incident_face,
                 reference_axis_index,
-                normal * flip_contact_normal,
+                reference_outwards_normal,
+                normal,
                 data,
                 restitution,
                 friction,
             )
             return
+
+        cross_index = best_index - 6
+        axis_one_index = cross_index // 3
+        axis_two_index = cross_index % 3
+
+        dir_one = one_axes[axis_one_index]
+        dir_two = two_axes[axis_two_index]
+
+        local_pt_one = np.copysign(box_one.half_size, one_axes @ -normal)
+        local_pt_two = np.copysign(box_two.half_size, two_axes @ normal)
+
+        local_pt_one[axis_one_index] = 0
+        local_pt_two[axis_two_index] = 0
+
+        world_pt_one = box_one.get_axis(3) + (one_axes.T @ local_pt_one)
+        world_pt_two = box_two.get_axis(3) + (two_axes.T @ local_pt_two)
+
+        center_vector = world_pt_one - world_pt_two
+
+        dot_one_two = dir_one @ dir_two
+        dot_one = center_vector @ dir_one
+        dot_two = center_vector @ dir_two
+
+        denominator = 1.0 - (dot_one_two * dot_one_two)
+
+        if abs(denominator) < 1e-6:
+            s = 0.0
+            t = dot_two
+        else:
+            s = (dot_one_two * dot_two - dot_one) / denominator
+            t = (dot_two - dot_one * dot_one_two) / denominator
+
+        one_size = box_one.half_size[axis_one_index]
+        two_size = box_two.half_size[axis_two_index]
+
+        s_one = np.clip(s, -one_size, one_size)
+        t_two = np.clip(t, -two_size, two_size)
+
+        closest_one = world_pt_one + s_one * dir_one
+        closest_two = world_pt_two + t_two * dir_two
+
+        contact_point = (closest_one + closest_two) * 0.5
+        data.contacts.append(
+            Contact(contact_point, normal, penetration, restitution, friction)
+        )
+        data.contact_count += 1
 
 
 @dataclass
@@ -354,6 +398,7 @@ class Sutherland_Hodgman:
             direction = 1.0
 
         face_signs = BOX_SIGNS[BOX_SIGNS[:, incident_index] == direction]
+        face_signs = face_signs[[0, 1, 3, 2]]
         local_vertices = face_signs * box.half_size
 
         num_vertices = local_vertices.shape[0]
@@ -368,11 +413,15 @@ class Sutherland_Hodgman:
         reference_box: Box,
         incident_face: np.ndarray,
         reference_axis_index: int,
+        reference_outwards_normal: np.ndarray,
         final_contact_normal: np.ndarray,
         data: ContactData,
         restitution: float,
         friction: float,
     ):
+        if data.contacts_left <= 0:
+            return
+
         if reference_box.half_size is None:
             raise ValueError("reference_box is not defined with half_size")
         current_polygon = incident_face
@@ -391,13 +440,31 @@ class Sutherland_Hodgman:
                 current_polygon, axis, offset_position
             )
 
-            offset_position = (reference_box_center @ axis) - half_size
+            offset_position = -(reference_box_center @ axis) + half_size
             current_polygon = Sutherland_Hodgman._clip_polygon_against_plane(
                 current_polygon, -axis, offset_position
             )
 
             if len(current_polygon) == 0:
                 break
+
+        reference_face_offset = (
+            reference_box_center @ reference_outwards_normal
+        ) + reference_box.half_size[reference_axis_index]
+        distance = (current_polygon @ reference_outwards_normal) - reference_face_offset
+        mask = distance <= 0.0
+
+        valid_contacts = current_polygon[mask]
+        valid_distances = distance[mask]
+        for contact, dist in zip(valid_contacts, valid_distances):
+            if data.contacts_left <= 0:
+                break
+            data.contacts.append(
+                Contact(
+                    contact, final_contact_normal, float(-dist), restitution, friction
+                )
+            )
+            data.contact_count += 1
 
     @staticmethod
     def _clip_polygon_against_plane(
@@ -407,7 +474,7 @@ class Sutherland_Hodgman:
             return polygon
 
         distances = polygon @ plane_normal - plane_offset
-        mask = distances >= 0
+        mask = distances <= 0
 
         if mask.all():
             return polygon
