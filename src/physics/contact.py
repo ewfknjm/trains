@@ -3,11 +3,14 @@ from dataclasses import dataclass, field
 import itertools
 from typing import Optional
 from .rigidbody import RigidBody
-from .transform import Transform4x4
+
+# box to box early out face axes before 9 cross, worth considering later on
 
 
 @dataclass
 class Contact:
+    body_a: RigidBody
+    body_b: Optional[RigidBody]
     contact_point: np.ndarray
     contact_normal: np.ndarray
     contact_penetration: float
@@ -40,6 +43,14 @@ class ContactData:
 
         self._contact_count = value
         self.contacts_left = new_contact_left
+
+    def add_contact(self, contact: Contact) -> bool:
+        if self.contacts_left <= 0:
+            return False
+
+        self.contacts.append(contact)
+        self.contact_count += 1
+        return True
 
 
 @dataclass
@@ -127,14 +138,15 @@ class CollisionDetector:
             contact_point = position_two + contact_normal * sphere_two.radius
 
         current = Contact(
+            sphere_one.body,
+            sphere_two.body,
             contact_point,
             contact_normal,
             float(penetration),
             collision_restitution,
             coefficient_of_friction,
         )
-        data.contacts.append(current)
-        data.contact_count += 1
+        data.add_contact(current)
 
     @staticmethod
     def sphere_and_half_space(
@@ -160,16 +172,16 @@ class CollisionDetector:
         surface_of_half_space = sphere_position_vector - (
             plane.normal * (distance + sphere.radius)
         )
-        data.contacts.append(
-            Contact(
-                surface_of_half_space,
-                plane.normal,
-                float(-distance),
-                collision_restitution,
-                coefficient_of_friction,
-            )
+        current = Contact(
+            sphere.body,
+            None,
+            surface_of_half_space,
+            plane.normal,
+            float(-distance),
+            collision_restitution,
+            coefficient_of_friction,
         )
-        data.contact_count += 1
+        data.add_contact(current)
 
     @staticmethod
     def box_and_half_space(
@@ -181,10 +193,14 @@ class CollisionDetector:
         if box.half_size is None:
             raise ValueError("box is not defined with half_size")
 
+        transform = box.get_transform()
+        axis_0 = transform[:3, 0]
+        axis_1 = transform[:3, 1]
+        axis_2 = transform[:3, 2]
         projected_radius = (
-            box.half_size[0] * abs(plane.normal @ box.get_axis(0))
-            + box.half_size[1] * abs(plane.normal @ box.get_axis(1))
-            + box.half_size[2] * abs(plane.normal @ box.get_axis(2))
+            box.half_size[0] * abs(plane.normal @ axis_0)
+            + box.half_size[1] * abs(plane.normal @ axis_1)
+            + box.half_size[2] * abs(plane.normal @ axis_2)
         )
 
         box_center = box.get_axis(3)
@@ -194,28 +210,28 @@ class CollisionDetector:
             return
 
         transform = box.get_transform()
-        contacts_used = 0
-        for vertex in box.vertices:
-            world_position_4 = transform @ np.append(vertex, 1.0)
-            world_position = world_position_4[:3]
+        vertices = box.vertices
+        ones = np.ones((len(vertices), 1))
+        local_position_4d = np.hstack([vertices, ones])
+        world_positions = (transform @ local_position_4d.T).T[:, :3]
+        vertex_distance = world_positions @ plane.normal
+        mask = vertex_distance <= plane.scalar_offset
+        penetrations = plane.scalar_offset - vertex_distance[mask]
+        valid_positions = world_positions[mask]
+        normal = plane.normal
 
-            vertex_distance = world_position @ plane.normal
-            if vertex_distance > plane.scalar_offset:
-                continue
-
-            penetration = plane.scalar_offset - vertex_distance
-            normal = plane.normal
-            contact_point = world_position + (plane.normal * penetration)
-            contacts_used += 1
-            data.contacts.append(
-                Contact(
-                    contact_point, normal, float(penetration), restitution, friction
-                )
+        for world_position, penetration in zip(valid_positions, penetrations):
+            current = Contact(
+                box.body,
+                None,
+                world_position,
+                normal,
+                penetration,
+                restitution,
+                friction,
             )
-            if contacts_used == data.contacts_left:
+            if not data.add_contact(current):
                 break
-
-        data.contact_count += contacts_used
 
     @staticmethod
     def box_and_sphere(
@@ -225,8 +241,11 @@ class CollisionDetector:
             raise ValueError("box is not defined with half_size")
 
         world_sphere_center = sphere.get_axis(3)
-        box_transform = Transform4x4(box.get_transform())
-        box_sphere_center = box_transform.world_to_local(world_sphere_center)
+        transform = box.get_transform()
+        rotation = transform[:3, :3]
+        position = transform[:3, 3]
+
+        box_sphere_center = rotation.T @ (world_sphere_center - position)
 
         if np.any(np.abs(box_sphere_center) - sphere.radius > box.half_size):
             return
@@ -236,7 +255,7 @@ class CollisionDetector:
         if distance > sphere.radius:
             return
 
-        world_closest_pt = box_transform.local_to_world(closest_pt)
+        world_closest_pt = rotation @ closest_pt + position
 
         direction = world_closest_pt - world_sphere_center
         magnitude = np.linalg.norm(direction)
@@ -247,16 +266,22 @@ class CollisionDetector:
             local_normal = np.zeros(3)
             local_normal[min_axis] = 1.0 if box_sphere_center[min_axis] > 0 else -1.0
 
-            normal = box.get_transform()[:3, :3] @ local_normal
+            normal = rotation @ local_normal
             penetration = float(sphere.radius + distances_to_face[min_axis])
         else:
             normal = direction / magnitude
             penetration = float(sphere.radius - distance)
 
-        data.contacts.append(
-            Contact(world_closest_pt, normal, penetration, restitution, friction)
-        )
-        data.contact_count += 1
+            current = Contact(
+                box.body,
+                sphere.body,
+                world_closest_pt,
+                normal,
+                penetration,
+                restitution,
+                friction,
+            )
+            data.add_contact(current)
 
     @staticmethod
     def box_and_box(
@@ -274,39 +299,95 @@ class CollisionDetector:
         box_two_transform = box_two.get_transform()
         one_axes = box_one_transform[:3, :3].T
         two_axes = box_two_transform[:3, :3].T
-        face_axes = np.vstack([one_axes, two_axes])
-        cross_grid = np.cross(one_axes[:, np.newaxis, :], two_axes[np.newaxis, :, :])
-        edge_axes = cross_grid.reshape(9, 3)
-        all_axes = np.vstack([face_axes, edge_axes])
 
-        norms = np.linalg.norm(all_axes, axis=1, keepdims=True)
+        change_of_basis = one_axes @ two_axes.T
+        abs_change_of_basis = np.abs(change_of_basis)
+
+        center_projection_one = one_axes @ center_difference_vector
+        penetration_one = (
+            box_one.half_size
+            + (abs_change_of_basis @ box_two.half_size)
+            - np.abs(center_projection_one)
+        )
+
+        if np.any(penetration_one <= 0):
+            return
+
+        center_projection_two = two_axes @ center_difference_vector
+        penetration_two = (
+            box_two.half_size
+            + (abs_change_of_basis.T @ box_one.half_size)
+            - np.abs(center_projection_two)
+        )
+
+        if np.any(penetration_two <= 0):
+            return
+
+        face_penetrations = np.concatenate([penetration_one, penetration_two])
+        best_single_axis_index = int(np.argmin(face_penetrations))
+        best_single_axis_pen = face_penetrations[best_single_axis_index]
+
+        edge_axes = np.cross(
+            one_axes[:, np.newaxis, :], two_axes[np.newaxis, :, :]
+        ).reshape(9, 3)
+
+        norms = np.linalg.norm(edge_axes, axis=1, keepdims=True)
         valid = norms[:, 0] > 1e-6
-        safe_norm = np.where(norms > 1e-6, norms, 1.0)
-        normalized_axes = all_axes / safe_norm
 
-        one_projection = box_one.half_size @ np.abs(one_axes @ normalized_axes.T)
-        two_projection = box_two.half_size @ np.abs(two_axes @ normalized_axes.T)
+        normalized_edge_axes = None
+        center_projection_edge = None  # pyright
 
-        center_projection = normalized_axes @ center_difference_vector
-        penetrations = one_projection + two_projection - np.abs(center_projection)
+        if np.any(valid):
+            safe_norm = np.where(norms > 1e-6, norms, 1.0)
+            normalized_edge_axes = edge_axes / safe_norm
 
-        if np.any((penetrations <= 0) & valid):
-            return None
+            one_projection_edge = (
+                np.abs(normalized_edge_axes @ one_axes.T) @ box_one.half_size
+            )
+            two_projection_edge = (
+                np.abs(normalized_edge_axes @ two_axes.T) @ box_two.half_size
+            )
 
-        mask = np.where(valid, penetrations, np.inf)
-        best_index = int(np.argmin(mask))
-        penetration = penetrations[best_index]
-        best_single_axis_index = int(np.argmin(mask[:6]))
+            center_projection_edge = normalized_edge_axes @ center_difference_vector
+            edge_penetrations = (
+                one_projection_edge
+                + two_projection_edge
+                - np.abs(center_projection_edge)
+            )
 
-        is_edge_axis = best_index >= 6
-        is_barely_better = mask[best_index] > mask[best_single_axis_index] - 1e-3
-        is_nearly_parallel = norms[best_index, 0] < 1e-3
+            if np.any((edge_penetrations <= 0) & valid):
+                return
 
-        if is_edge_axis and (is_barely_better or is_nearly_parallel):
+            edge_mask = np.where(valid, edge_penetrations, np.inf)
+            best_edge_index = int(np.argmin(edge_mask))
+            best_edge_pen = edge_mask[best_edge_index]
+
+            is_barely_better = best_edge_pen > best_single_axis_pen - 1e-3
+            is_nearly_parallel = norms[best_edge_index, 0] < 1e-3
+
+            if is_barely_better or is_nearly_parallel:
+                best_index = best_single_axis_index
+                penetration = best_single_axis_pen
+            else:
+                best_index = best_edge_index + 6
+                penetration = best_edge_pen
+        else:
             best_index = best_single_axis_index
+            penetration = best_single_axis_pen
 
-        normal = normalized_axes[best_index]
-        if center_projection[best_index] > 0:
+        if best_index < 6:
+            face_axes = np.vstack((one_axes, two_axes))
+            normal = face_axes[best_index]
+            best_center_projection = np.concatenate(
+                [center_projection_one, center_projection_two]
+            )[best_index]
+        else:
+            assert normalized_edge_axes is not None
+            assert center_projection_edge is not None
+            normal = normalized_edge_axes[best_index - 6]
+            best_center_projection = center_projection_edge[best_index - 6]
+
+        if best_center_projection > 0:
             normal = -normal
 
         if best_index < 6:
@@ -326,6 +407,7 @@ class CollisionDetector:
             )
             Sutherland_Hodgman.clip_and_generate_contacts(
                 reference_box,
+                incident_box,
                 incident_face,
                 reference_axis_index,
                 reference_outwards_normal,
@@ -377,10 +459,16 @@ class CollisionDetector:
         closest_two = world_pt_two + t_two * dir_two
 
         contact_point = (closest_one + closest_two) * 0.5
-        data.contacts.append(
-            Contact(contact_point, normal, penetration, restitution, friction)
+        current = Contact(
+            box_one.body,
+            box_two.body,
+            contact_point,
+            normal,
+            penetration,
+            restitution,
+            friction,
         )
-        data.contact_count += 1
+        data.add_contact(current)
 
 
 @dataclass
@@ -411,6 +499,7 @@ class Sutherland_Hodgman:
     @staticmethod
     def clip_and_generate_contacts(
         reference_box: Box,
+        incident_box: Box,
         incident_face: np.ndarray,
         reference_axis_index: int,
         reference_outwards_normal: np.ndarray,
@@ -425,8 +514,9 @@ class Sutherland_Hodgman:
         if reference_box.half_size is None:
             raise ValueError("reference_box is not defined with half_size")
         current_polygon = incident_face
-        reference_box_center = reference_box.get_axis(3)
-        rotation_matrix = reference_box.get_transform()[:3, :3]
+        reference_transform = reference_box.get_transform()
+        reference_box_center = reference_transform[:3, 3]
+        rotation_matrix = reference_transform[:3, :3]
 
         for i in range(3):
             if i == reference_axis_index:
@@ -457,14 +547,17 @@ class Sutherland_Hodgman:
         valid_contacts = current_polygon[mask]
         valid_distances = distance[mask]
         for contact, dist in zip(valid_contacts, valid_distances):
-            if data.contacts_left <= 0:
-                break
-            data.contacts.append(
-                Contact(
-                    contact, final_contact_normal, float(-dist), restitution, friction
-                )
+            current = Contact(
+                reference_box.body,
+                incident_box.body,
+                contact,
+                final_contact_normal,
+                float(-dist),
+                restitution,
+                friction,
             )
-            data.contact_count += 1
+            if not data.add_contact(current):
+                break
 
     @staticmethod
     def _clip_polygon_against_plane(
@@ -481,19 +574,22 @@ class Sutherland_Hodgman:
         if not mask.any():
             return np.empty((0, 3))
 
-        shifted_mask = np.roll(mask, -1, axis=0)
+        N = len(polygon)
+        next_index = np.arange(N)
+        next_index = np.roll(next_index, -1, axis=0)
+
+        shifted_mask = mask[next_index]
         crossings = mask ^ shifted_mask
 
         start_distances = distances[crossings]
-        end_distances = np.roll(distances, -1, axis=0)[crossings]
+        end_distances = distances[next_index]
 
-        shifted_polygon = np.roll(polygon, -1, axis=0)[crossings]
+        shifted_polygon = polygon[next_index]
         t = start_distances / (start_distances - end_distances)
         start = polygon[crossings]
         end = shifted_polygon[crossings]
         intersections = start + t[:, np.newaxis] * (end - start)
 
-        N = len(polygon)
         output = np.zeros((N, 2, 3))
         valid = np.zeros((N, 2), dtype=bool)
 
