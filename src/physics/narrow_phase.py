@@ -54,7 +54,7 @@ class Sphere(Primitive):
     def collide_with_sphere(
         self, sphere: Sphere, data: ContactData, restitution: float, friction: float
     ) -> None:
-        if data.contacts_left <= 0:
+        if data.is_full:
             return
 
         position_one = self.get_axis(3)
@@ -96,7 +96,7 @@ class Sphere(Primitive):
     def collide_with_plane(
         self, plane: Plane, data: ContactData, restitution: float, friction: float
     ) -> None:
-        if data.contacts_left <= 0:
+        if data.is_full:
             return
 
         sphere_position_vector = self.get_axis(3)
@@ -412,7 +412,7 @@ class Box(Primitive):
     def collide_with_plane(
         self, plane: Plane, data: ContactData, restitution: float, friction: float
     ) -> None:
-        if data.contacts_left <= 0:
+        if data.is_full:
             return
 
         if self.half_size is None:
@@ -496,7 +496,7 @@ class Sutherland_Hodgman:
         restitution: float,
         friction: float,
     ):
-        if data.contacts_left <= 0:
+        if data.is_full:
             return
 
         if reference_box.half_size is None:
