@@ -11,7 +11,7 @@ class EulerIntegrator:
         body.position += body.velocity * dt
 
         R = body.transform_matrix[:3, :3]
-        angular_velocity_world = body.rotation
+        angular_velocity_world = body.omega
         angular_velocity_local = R.T @ angular_velocity_world
 
         I_local = body.inertia_tensor
@@ -29,8 +29,8 @@ class EulerIntegrator:
 
         angular_acceleration_world = R @ angular_acceleration_local
 
-        body.rotation += angular_acceleration_world * dt
-        body.rotation *= body.angular_damping**dt
-        body.orientation.add_scaled_vector(body.rotation, dt)
+        body.omega += angular_acceleration_world * dt
+        body.omega *= body.angular_damping**dt
+        body.orientation.add_scaled_vector(body.omega, dt)
 
         body.mark_dirty()

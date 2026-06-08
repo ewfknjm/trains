@@ -85,14 +85,14 @@ class Contact:
         body_b = self.body_b
 
         a_relative_contact_position = self.contact_point - body_a.position
-        a_angular_velocity = np.cross(body_a.rotation, a_relative_contact_position)
+        a_angular_velocity = np.cross(body_a.omega, a_relative_contact_position)
         closing_velocity = a_angular_velocity + body_a.velocity
 
         if not body_b:
             return closing_velocity
 
         b_relative_contact_position = self.contact_point - body_b.position
-        b_angular_velocity = np.cross(body_b.rotation, b_relative_contact_position)
+        b_angular_velocity = np.cross(body_b.omega, b_relative_contact_position)
         closing_velocity -= b_angular_velocity + body_b.velocity
 
         return closing_velocity
@@ -135,7 +135,7 @@ class Contact:
         )
 
         body_a.velocity += a_velocity_change
-        body_a.rotation += a_omega_change
+        body_a.omega += a_omega_change
 
         body_b = self.body_b
         if not body_b:
@@ -147,7 +147,7 @@ class Contact:
         )
 
         body_b.velocity += b_velocity_change
-        body_b.rotation += b_omega_change
+        body_b.omega += b_omega_change
 
 
 @dataclass

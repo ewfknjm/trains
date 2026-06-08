@@ -8,7 +8,7 @@ class RigidBody:
         self._position = np.array([x, y, z], dtype="float")
         self.velocity = np.zeros(3, dtype="float")
         self.acceleration = np.zeros(3, dtype="float")
-        self.rotation = np.zeros(3, dtype="float")
+        self.omega = np.zeros(3, dtype="float")
 
         self._mass = 1.0
         self.inverse_mass: float = 1.0
