@@ -106,27 +106,38 @@ class Contact:
 
     def calculate_desired_velocity_change(self: Contact) -> float:
         closing_contact_velocity = self.calculate_closing_velocity_contact()
+
+        if closing_contact_velocity >= 0.0:
+            return 0.0
+
         return float(-closing_contact_velocity * (1 + self.collision_restitution))
 
-    def calculate_impulse(self: Contact) -> float:
+    def calculate_impulse(self: Contact) -> np.ndarray:
+        impulse = np.zeros(3)
         delta_velocity = self.calculate_velocity_change_per_unit_impulse()
         desired_delta_velocity = self.calculate_desired_velocity_change()
         if math.isclose(delta_velocity, 0.0):
-            return 0.0
+            return impulse
 
-        impulse_x = desired_delta_velocity / delta_velocity
-        return float(self.contact_normal @ impulse_x)
+        impulse[0] = desired_delta_velocity / delta_velocity
+        transform = get_contact_basis(self.contact_normal)
+        impulse_world = transform @ impulse
+
+        return impulse_world
 
     def _calculate_omega_change(
-        self, body: RigidBody, contact_point: np.ndarray, impulse: float
-    ) -> float:
+        self, body: RigidBody, contact_point: np.ndarray, impulse_vector: np.ndarray
+    ) -> np.ndarray:
         relative_contact_position = contact_point - body.position
-        impulsive_torque = np.cross(impulse, relative_contact_position)
+        impulsive_torque = np.cross(relative_contact_position, impulse_vector)
         omega_change = body.inverse_inertia_tensor_world @ impulsive_torque
-        return float(omega_change)
+        return omega_change
 
     def apply_impulse(self):
         impulse = self.calculate_impulse()
+
+        if np.allclose(impulse, 0.0):
+            return
 
         body_a = self.body_a
         a_velocity_change = impulse * body_a.inverse_mass
