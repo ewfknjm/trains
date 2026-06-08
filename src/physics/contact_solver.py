@@ -48,8 +48,11 @@ class ContactResolver:
 
     @staticmethod
     def calculate_velocity_change_per_unit_impulse(
-        body_a: RigidBody, body_b: Optional[RigidBody], contact_info: Contact
+         contact_info: Contact
     ) -> float:
+        body_a = contact_info.body_a
+        body_b = contact_info.body_b
+
         contact_point = contact_info.contact_point
         contact_normal = contact_info.contact_normal
         a_relative_contact_position = contact_point - body_a.position
@@ -71,8 +74,11 @@ class ContactResolver:
 
     @staticmethod
     def calculate_closing_velocity_world(
-        body_a: RigidBody, body_b: Optional[RigidBody], contact_info: Contact
+         contact_info: Contact
     ) -> np.ndarray:
+        body_a = contact_info.body_a
+        body_b - contact_info.body_b
+
         a_relative_contact_position = contact_info.contact_point - body_a.position
         a_angular_velocity = np.cross(body_a.rotation, a_relative_contact_position)
         closing_velocity = a_angular_velocity + body_a.velocity
@@ -88,15 +94,21 @@ class ContactResolver:
 
     @staticmethod
     def calculate_closing_velocity_contact(
-        closing_velocity_world: np.ndarray, contact_info: Contact
+             contact_info: Contact
     ) -> float:
         # transform = ContactResolver.get_contact_basis(contact_info.contact_normal)
         # contact_velocity = transform.T @ closing_velocity_world
         # return contact_velocity[0]
+        closing_velocity_world = ContactResolver.calculate_closing_velocity_world(contact_info)
         return float(closing_velocity_world @ contact_info.contact_normal)
 
     @staticmethod
     def calculate_desired_velocity_change(
-        restitution: float, closing_contact_velocity: float
+            contact_info: Contact
     ):
-        return -closing_contact_velocity * (1 + restitution)
+        closing_contact_velocity = ContactResolver.calculate_closing_velocity_contact(contact_info)
+        return -closing_contact_velocity * (1 + contact_info.collision_restitution)
+
+    @staticmethod
+    def calculate_impulse(body_a: RigidBody, body_b: Optional[RigidBody], contact_info: Contact):
+        delta_velocity = calculate_velocity_change_per_unit_impulse(body_a, body_b, contact_info)
