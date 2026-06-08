@@ -72,7 +72,10 @@ class PreparedContact:
         delta_pos_a = lin_a * n
         c.body_a.position += delta_pos_a
 
-        if not math.isclose(K_angular_a, 0.0) and np.linalg.norm(self.rxn_a) > 1e-8:
+        if (
+            not math.isclose(K_angular_a, 0.0, abs_tol=1e-8)
+            and np.linalg.norm(self.rxn_a) > 1e-8
+        ):
             inertia_rxn_a = c.body_a.inverse_inertia_tensor_world @ self.rxn_a
             p_a = ang_a / max(float(self.rxn_a @ inertia_rxn_a), 1e-8)
             delta_rot_a = inertia_rxn_a * float(p_a)
@@ -80,7 +83,6 @@ class PreparedContact:
 
         c.body_a.mark_dirty()
 
-        delta_pos_b = np.zeros(3)
         if c.body_b and self.relative_b is not None and self.rxn_b is not None:
             K_angular_b = self.k_b - c.body_b.inverse_mass
             lin_b = depth * c.body_b.inverse_mass / self.K
@@ -95,7 +97,10 @@ class PreparedContact:
             delta_pos_b = -lin_b * n
             c.body_b.position += delta_pos_b
 
-            if not math.isclose(K_angular_b, 0.0) and np.linalg.norm(self.rxn_b) > 1e-8:
+            if (
+                not math.isclose(K_angular_b, 0.0, abs_tol=1e-8)
+                and np.linalg.norm(self.rxn_b) > 1e-8
+            ):
                 inertia_rxn_b = c.body_b.inverse_inertia_tensor_world @ self.rxn_b
                 p_b = ang_b / max(float(self.rxn_b @ inertia_rxn_b), 1e-8)
                 delta_rot_b = inertia_rxn_b * float(-p_b)
@@ -131,17 +136,18 @@ def prepare_contacts(contacts: list[Contact]) -> list[PreparedContact]:
 
 
 class ContactResolver:
-    def __init__(self, velocity_iterations: int, position_iterations: int):
+    def __init__(self, velocity_iterations: int, position_iterations: int, dt: float):
         self.velocity_iterations = velocity_iterations
         self.position_iterations = position_iterations
+        self.dt = dt
 
     def resolve(self, data: ContactData):
         if not data.contacts:
             return
 
         prepared = prepare_contacts(data.contacts)
+        self._resolve_velocities(prepared, self.dt)
         self._resolve_penetrations(prepared)
-        self._resolve_velocities(prepared)
 
     def _resolve_penetrations(self, prepared_contacts: list[PreparedContact]):
         for _ in range(self.position_iterations):
@@ -184,9 +190,7 @@ class ContactResolver:
                     displacement = delta_pos_b + np.cross(delta_rot_b, other.relative_b)
                     oc.contact_penetration += float(displacement @ n)
 
-    def _resolve_velocities(self, prepared_list: list[PreparedContact]):
-        VELOCITY_EPSILON = 0.25
-
+    def _resolve_velocities(self, prepared_list: list[PreparedContact], dt: float):
         for _ in range(self.velocity_iterations):
             worst_contact_velocity = 0.0
             worst_contact: Optional[PreparedContact] = None
@@ -201,13 +205,28 @@ class ContactResolver:
                 break
 
             K = worst_contact.K
-            if math.isclose(K, 0.0):
+            if math.isclose(K, 0.0, abs_tol=1e-8):
                 continue
 
-            e = worst_contact.contact.collision_restitution
+            c = worst_contact.contact
+            e = c.collision_restitution
 
-            if abs(worst_contact_velocity) < VELOCITY_EPSILON:
-                e = 0.0
+            a_acceleration = c.body_a.last_frame_acceleration
+            b_acceleration = (
+                c.body_b.last_frame_acceleration if c.body_b else np.zeros(3)
+            )
 
-            j = -(1.0 + e) * worst_contact_velocity / K
+            accel_velocity = (a_acceleration - b_acceleration) * dt
+            accel_build_up = float(accel_velocity @ c.contact_normal)
+
+            bounce_velocity = -e * worst_contact_velocity
+
+            if accel_build_up < 0.0:
+                bounce_velocity += e * accel_build_up
+
+                bounce_velocity = 0.0 if bounce_velocity < 0.0 else bounce_velocity
+
+            desired_velocity_change = bounce_velocity - worst_contact_velocity
+
+            j = desired_velocity_change / K
             worst_contact.apply_velocity_change(j)

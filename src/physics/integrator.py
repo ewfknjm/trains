@@ -5,6 +5,7 @@ from .rigidbody import RigidBody
 class EulerIntegrator:
     @staticmethod
     def integrate(body: RigidBody, dt: float) -> None:
+        body.last_frame_acceleration = body.acceleration.copy()
         body.acceleration = body.force_accum * body.inverse_mass
         body.velocity += body.acceleration * dt
         body.velocity *= body.linear_damping**dt
