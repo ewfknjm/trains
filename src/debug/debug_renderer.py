@@ -7,11 +7,11 @@ from ursina import EditorCamera
 from ursina.color import Color
 from panda3d.core import Quat as PandaQuat
 
-from ..physics.world import World
-from ..physics.rigidbody import RigidBody
-from ..physics.contact import ContactData
-from ..physics.contact_solver import ContactResolver
-from ..physics.narrow_phase import Primitive, Sphere, Box
+from physics.world import World
+from physics.rigidbody import RigidBody
+from physics.contact import ContactData
+from physics.contact_solver import ContactResolver
+from physics.narrow_phase import Primitive, Sphere, Box
 
 
 # ── colour palette ──────────────────────────────────────────────────────────
@@ -154,8 +154,8 @@ class DebugRenderer:
         mass: float = 1.0,
         body_color: Color | None = None,
     ) -> tuple[RigidBody, Box]:
-        from ..physics.rigidbody import RigidBody
-        from ..physics.narrow_phase import Box
+        from physics.rigidbody import RigidBody
+        from physics.narrow_phase import Box
         import numpy as np
 
         pos = np.asarray(position, dtype=float)
@@ -191,8 +191,8 @@ class DebugRenderer:
         mass: float = 1.0,
         body_color: Color | None = None,
     ) -> tuple[RigidBody, Sphere]:
-        from ..physics.rigidbody import RigidBody
-        from ..physics.narrow_phase import Sphere
+        from physics.rigidbody import RigidBody
+        from physics.narrow_phase import Sphere
         import numpy as np
 
         pos = np.asarray(position, dtype=float)
@@ -209,15 +209,15 @@ class DebugRenderer:
         return body, sphere
 
     def add_gravity(self) -> None:
-        from ..physics.force_generators import Gravity
+        from physics.force_generators import Gravity
 
         g = Gravity()
         for rec in self._records:
             self._world.add_force_generators(rec.body, g)
 
     def add_floor_plane(self, y: float = 0.0) -> None:
-        from ..physics.narrow_phase import Plane
-        from ..physics.material import Materials
+        from physics.narrow_phase import Plane
+        from physics.material import Materials
         import numpy as np
 
         plane = Plane(
