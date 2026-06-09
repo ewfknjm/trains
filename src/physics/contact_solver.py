@@ -1,12 +1,37 @@
 from dataclasses import dataclass
 from typing import Optional
-
 import numpy as np
 from .contact import Contact, ContactData
 from .rigidbody import RigidBody
 import math
 
 ANGULAR_LIMIT_CONSTANT = 0.2
+
+
+def get_contact_basis(normal: np.ndarray) -> np.ndarray:
+    nx = normal[0]
+    ny = normal[1]
+    nz = normal[2]
+
+    if abs(nx) <= abs(ny):
+        tx = 0.0
+        ty = nz
+        tz = -ny
+    else:
+        tx = -nz
+        ty = 0.0
+        tz = nx
+
+    t_len = math.sqrt(tx * tx + ty * ty + tz * tz)
+    tx /= t_len
+    ty /= t_len
+    tz /= t_len
+
+    bx = ny * tz - nz * ty
+    by = nz * tx - nx * tz
+    bz = nx * ty - ny * tx
+
+    return np.array([[nx, tx, bx], [ny, ty, by], [nz, tz, bz]], dtype=float)
 
 
 @dataclass
@@ -20,11 +45,15 @@ class PreparedContact:
     rxn_b: Optional[np.ndarray]
     k_b: float
 
+    contact_basis: Optional[np.ndarray]
+    impulse_matrix: np.ndarray
+    inverse_mass_matrix: np.ndarray
+
     @property
     def K(self) -> float:
         return self.k_a + self.k_b
 
-    def contact_velocity(self) -> float:
+    def contact_velocity(self) -> np.ndarray:
         c = self.contact
         closing_velocity = c.body_a.velocity + np.cross(c.body_a.omega, self.relative_a)
         if c.body_b and self.relative_b is not None:
@@ -32,11 +61,13 @@ class PreparedContact:
                 c.body_b.omega, self.relative_b
             )
 
-        return float(closing_velocity @ c.contact_normal)
+        if self.contact_basis is None:
+            raise ValueError("prepare first")
 
-    def apply_velocity_change(self, impulse: float):
+        return self.contact_basis.T @ closing_velocity
+
+    def apply_velocity_change(self, impulse_vector: np.ndarray):
         c = self.contact
-        impulse_vector = impulse * c.contact_normal
 
         c.body_a.velocity += impulse_vector * c.body_a.inverse_mass
         c.body_a.omega += c.body_a.inverse_inertia_tensor_world @ np.cross(
@@ -119,20 +150,48 @@ def _inertia_contribution(
     return K, rxn
 
 
+def skew(v: np.ndarray) -> np.ndarray:
+    vx, vy, vz = v
+    return np.array(
+        [
+            [0.0, -vz, vy],
+            [vz, 0.0, -vx],
+            [-vy, vx, 0.0],
+        ]
+    )
+
+
 def prepare_contacts(contacts: list[Contact]) -> list[PreparedContact]:
     prepared = []
     for c in contacts:
         n = c.contact_normal
         r_a = c.contact_point - c.body_a.position
         K_a, rxn_a = _inertia_contribution(c.body_a, r_a, n)
+        skewed_a = skew(r_a)
+        Z = -skewed_a @ c.body_a.inverse_inertia_tensor_world @ skewed_a
+        inverse_mass = c.body_a.inverse_mass
 
         r_b, rxn_b, K_b = None, None, 0.0
         if c.body_b:
             r_b = c.contact_point - c.body_b.position
             K_b, rxn_b = _inertia_contribution(c.body_b, r_b, n)
+            skewed_b = skew(r_b)
+            Z += -skewed_b @ c.body_b.inverse_inertia_tensor_world @ skewed_b
+            inverse_mass += c.body_b.inverse_mass
 
-        prepared.append(PreparedContact(c, r_a, rxn_a, K_a, r_b, rxn_b, K_b))
+        contact_basis = get_contact_basis(n)
+        Y = contact_basis.T @ Z @ contact_basis
+        Y += np.eye(3) * inverse_mass
+        impulse_matrix = np.linalg.inv(Y)
+        prepared.append(
+            PreparedContact(
+                c, r_a, rxn_a, K_a, r_b, rxn_b, K_b, contact_basis, impulse_matrix, Y
+            )
+        )
     return prepared
+
+
+FRICTION = 0.5
 
 
 class ContactResolver:
@@ -197,8 +256,8 @@ class ContactResolver:
 
             for pc in prepared_list:
                 current_contact_velocity = pc.contact_velocity()
-                if current_contact_velocity < worst_contact_velocity:
-                    worst_contact_velocity = current_contact_velocity
+                if current_contact_velocity[0] < worst_contact_velocity:
+                    worst_contact_velocity = current_contact_velocity[0]
                     worst_contact = pc
 
             if worst_contact is None:
@@ -217,16 +276,52 @@ class ContactResolver:
             )
 
             accel_velocity = (a_acceleration - b_acceleration) * dt
-            accel_build_up = float(accel_velocity @ c.contact_normal)
+            accel_contact = worst_contact.contact_basis @ accel_velocity
+
+            accel_build_up = accel_contact[0]
 
             bounce_velocity = -e * worst_contact_velocity
-
             if accel_build_up < 0.0:
                 bounce_velocity += e * accel_build_up
-
                 bounce_velocity = 0.0 if bounce_velocity < 0.0 else bounce_velocity
 
+            # scalar x
             desired_velocity_change = bounce_velocity - worst_contact_velocity
+            contact_velocity = worst_contact.contact_velocity()
 
-            j = desired_velocity_change / K
-            worst_contact.apply_velocity_change(j)
+            planar_velocity = contact_velocity[1:]
+            planar_acceleration = accel_contact[1:]
+
+            kinematic_planar_velocity = planar_velocity - planar_acceleration
+
+            target_velocity = np.array(
+                [desired_velocity_change, -contact_velocity[1], -contact_velocity[2]]
+            )
+
+            impulse_contact = worst_contact.impulse_matrix @ target_velocity
+            modified = impulse_contact.copy()
+            modified[0] = 0
+            planar_impulse = np.linalg.norm(modified[1:])
+
+            kinematic_impulse_needed = np.linalg.norm(
+                worst_contact.impulse_matrix[1:, 1:] @ -kinematic_planar_velocity
+            )
+
+            STATIC_FRICTION = FRICTION * 1.2
+            DYNAMIC_FRICTION = FRICTION
+
+            if kinematic_impulse_needed > impulse_contact[0] * STATIC_FRICTION:
+                impulse_contact[1:] /= planar_impulse
+
+                delta_velocity = worst_contact.inverse_mass_matrix[0, :]
+                denominator = (
+                    delta_velocity[0]
+                    + delta_velocity[1] * FRICTION * impulse_contact[1]
+                    + delta_velocity[2] * FRICTION * impulse_contact[2]
+                )
+
+                impulse_contact[0] = desired_velocity_change / denominator
+                impulse_contact[1:] *= DYNAMIC_FRICTION * impulse_contact[0]
+
+            impulse_world = worst_contact.contact_basis @ impulse_contact
+            worst_contact.apply_velocity_change(impulse_world)
