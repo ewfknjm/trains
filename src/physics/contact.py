@@ -36,14 +36,6 @@ def get_contact_basis(normal: np.ndarray) -> np.ndarray:
     return np.array([[nx, tx, bx], [ny, ty, by], [nz, tz, bz]], dtype=float)
 
 
-def angular_delta_velocity(
-    body: RigidBody, relative_position: np.ndarray, contact_normal: np.ndarray
-) -> float:
-    rxn = np.cross(relative_position, contact_normal)
-    delta_omega = body.inverse_inertia_tensor_world @ rxn
-    return float(delta_omega @ rxn)
-
-
 # -------------------- end of helper functions -------------------------------------- #
 
 

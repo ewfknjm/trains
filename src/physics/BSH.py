@@ -74,6 +74,9 @@ class BSHTree(BroadPhase):
         self.root: BSHNode | None = None
         self._usage_limit = usage_limit
 
+    def clear(self) -> None:
+        self.root = None
+
     def get_candidate_pairs(self) -> list[CandidatePair]:
         pairs: list[CandidatePair] = []
         if self.root and self.root.left is not None and self.root.right is not None:

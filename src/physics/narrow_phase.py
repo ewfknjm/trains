@@ -1,9 +1,12 @@
 from __future__ import annotations
 import numpy as np
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, KW_ONLY
 import itertools
 from typing import Optional
+
+from .material import PhysicsMaterial, Materials
+from physics.BSH import BoundingSphere
 from .rigidbody import RigidBody
 from .contact import ContactData, Contact
 
@@ -34,12 +37,17 @@ class Shape(ABC):
 class Primitive(Shape):
     body: RigidBody
     offset_matrix: np.ndarray
+    _: KW_ONLY
+    material: PhysicsMaterial = field(default_factory=lambda: Materials.DEFAULT)
 
     def get_transform(self) -> np.ndarray:
         return self.body.transform_matrix @ self.offset_matrix
 
     def get_axis(self, index: int) -> np.ndarray:
         return self.get_transform()[:3, index]
+
+    @abstractmethod
+    def bounding_sphere(self) -> BoundingSphere: ...
 
 
 @dataclass
@@ -121,11 +129,15 @@ class Sphere(Primitive):
         )
         data.add_contact(current)
 
+    def bounding_sphere(self) -> BoundingSphere:
+        return BoundingSphere(radius=self.radius, center=self.get_axis(3).copy())
+
 
 @dataclass
 class Plane(Shape):
     normal: np.ndarray
     scalar_offset: float
+    material: PhysicsMaterial = field(default_factory=lambda: Materials.DEFAULT)
 
     def collide_with(
         self, other: Shape, data: ContactData, restitution: float, friction: float
@@ -457,6 +469,12 @@ class Box(Primitive):
             )
             if not data.add_contact(current):
                 break
+
+    def bounding_sphere(self) -> BoundingSphere:
+        if self._half_size is None:
+            raise ValueError("half_size not set")
+        radius = float(np.linalg.norm(self._half_size))
+        return BoundingSphere(radius=radius, center=self.get_axis(3).copy())
 
 
 @dataclass

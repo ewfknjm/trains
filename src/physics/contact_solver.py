@@ -6,6 +6,7 @@ from .rigidbody import RigidBody
 import math
 
 ANGULAR_LIMIT_CONSTANT = 0.2
+STATIC_FRICTION_RATIO = 1.2
 
 
 @dataclass
@@ -165,9 +166,6 @@ def prepare_contacts(contacts: list[Contact]) -> list[PreparedContact]:
     return prepared
 
 
-FRICTION = 0.5
-
-
 class ContactResolver:
     def __init__(self, velocity_iterations: int, position_iterations: int, dt: float):
         self.velocity_iterations = velocity_iterations
@@ -249,6 +247,9 @@ class ContactResolver:
 
             c = worst_contact.contact
             e = c.collision_restitution
+            mu = c.coefficient_of_friction
+            STATIC_FRICTION = mu * STATIC_FRICTION_RATIO
+            DYNAMIC_FRICTION = mu
 
             a_acceleration = c.body_a.last_frame_acceleration
             b_acceleration = (
@@ -259,7 +260,7 @@ class ContactResolver:
                 raise ValueError("prepare contacts first")
 
             accel_velocity = (a_acceleration - b_acceleration) * dt
-            accel_contact = worst_contact.contact_basis @ accel_velocity
+            accel_contact = worst_contact.contact_basis.T @ accel_velocity
 
             accel_build_up = accel_contact[0]
 
@@ -290,17 +291,14 @@ class ContactResolver:
                 worst_contact.impulse_matrix[1:, 1:] @ -kinematic_planar_velocity
             )
 
-            STATIC_FRICTION = FRICTION * 1.2
-            DYNAMIC_FRICTION = FRICTION
-
             if kinematic_impulse_needed > impulse_contact[0] * STATIC_FRICTION:
                 impulse_contact[1:] /= planar_impulse
 
                 delta_velocity = worst_contact.inverse_mass_matrix[0, :]
                 denominator = (
                     delta_velocity[0]
-                    + delta_velocity[1] * FRICTION * impulse_contact[1]
-                    + delta_velocity[2] * FRICTION * impulse_contact[2]
+                    + delta_velocity[1] * DYNAMIC_FRICTION * impulse_contact[1]
+                    + delta_velocity[2] * DYNAMIC_FRICTION * impulse_contact[2]
                 )
 
                 impulse_contact[0] = desired_velocity_change / denominator

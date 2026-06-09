@@ -10,3 +10,4 @@ from .broad_phase import CandidatePair, BroadPhase
 from .BSP import BSPPlane, BSPLeaf, BSPTree, BSPNode
 from .BSH import BoundingSphere, BSHNode, BSHTree
 from .contact import Contact, ContactData
+from .material import PhysicsMaterial, Materials
