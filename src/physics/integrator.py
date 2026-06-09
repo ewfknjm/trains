@@ -46,3 +46,6 @@ class EulerIntegrator:
                 np.dot(body.velocity, body.velocity) + np.dot(body.omega, body.omega)
             )
             body.motion = SLEEP_BIAS * body.motion + (1.0 - SLEEP_BIAS) * current_motion
+
+            if body.motion < body.sleep_motion_threshold:
+                body.set_sleeping()

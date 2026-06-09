@@ -1,37 +1,11 @@
 from dataclasses import dataclass
 from typing import Optional
 import numpy as np
-from .contact import Contact, ContactData
+from .contact import Contact, ContactData, get_contact_basis
 from .rigidbody import RigidBody
 import math
 
 ANGULAR_LIMIT_CONSTANT = 0.2
-
-
-def get_contact_basis(normal: np.ndarray) -> np.ndarray:
-    nx = normal[0]
-    ny = normal[1]
-    nz = normal[2]
-
-    if abs(nx) <= abs(ny):
-        tx = 0.0
-        ty = nz
-        tz = -ny
-    else:
-        tx = -nz
-        ty = 0.0
-        tz = nx
-
-    t_len = math.sqrt(tx * tx + ty * ty + tz * tz)
-    tx /= t_len
-    ty /= t_len
-    tz /= t_len
-
-    bx = ny * tz - nz * ty
-    by = nz * tx - nx * tz
-    bz = nx * ty - ny * tx
-
-    return np.array([[nx, tx, bx], [ny, ty, by], [nz, tz, bz]], dtype=float)
 
 
 @dataclass

@@ -7,6 +7,6 @@ from .transform import Transform4x4
 from .quaternions import Quaternion
 from .narrow_phase import Shape, Primitive, Sphere, Box, Plane
 from .broad_phase import CandidatePair, BroadPhase
-from .BSP import Plane, BSPLeaf, BSPTree, BSPNode
+from .BSP import BSPPlane, BSPLeaf, BSPTree, BSPNode
 from .BSH import BoundingSphere, BSHNode, BSHTree
 from .contact import Contact, ContactData

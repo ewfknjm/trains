@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 
 @dataclass
-class Plane:
+class BSPPlane:
     position: np.ndarray
     direction: np.ndarray
 
@@ -20,7 +20,7 @@ class BSPLeaf:
 
 @dataclass
 class BSPNode:
-    plane: Plane
+    plane: BSPPlane
     front: BSPNode | BSPLeaf
     back: BSPNode | BSPLeaf
 
@@ -65,12 +65,12 @@ class BSPTree:
             except ValueError:
                 pass
 
-    def build(self, planes: list[Plane], max_depth: int) -> None:
+    def build(self, planes: list[BSPPlane], max_depth: int) -> None:
         count = 0
         self.root = self._build_recursive(planes, len(planes), count, max_depth)
 
     def _build_recursive(
-        self, planes: list[Plane], plane_list_size: int, count: int, depth_left: int
+        self, planes: list[BSPPlane], plane_list_size: int, count: int, depth_left: int
     ) -> BSPLeaf | BSPNode:
         if count == plane_list_size or depth_left <= 0:
             return BSPLeaf()
