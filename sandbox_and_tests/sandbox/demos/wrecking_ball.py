@@ -68,11 +68,13 @@ START = [
 ball_body, ball_shape = renderer.add_sphere(
     position=START,
     radius=BALL_RADIUS,
-    mass=5.0,
+    mass=6.0,
     body_color=color.orange,
 )
 ball_shape.material = Materials.RUBBER  # bouncy + high friction
-ball_body.can_sleep = False  # pendulum swings forever; turning-point velocity must not trigger sleep
+ball_body.can_sleep = (
+    False  # pendulum swings forever; turning-point velocity must not trigger sleep
+)
 
 renderer._world.add_force_generators(
     ball_body,
@@ -110,7 +112,7 @@ _CableEntity()
 # y ≈ 3.1, so the ball strikes between rows 2 and 3 – maximum chaos.
 TOWER_X = -3.8
 BOX_HS = 0.5  # half-size; full side = 1 m
-ROWS, COLS = 5, 1
+ROWS, COLS = 7, 2
 ROW_COLORS = [color.red, color.yellow, color.green, color.cyan]
 
 for row in range(ROWS):
@@ -120,10 +122,10 @@ for row in range(ROWS):
         _, shape = renderer.add_box(
             position=[x, y, 0.0],
             half_size=[BOX_HS, BOX_HS, BOX_HS],
-            mass=1.0,
+            mass=0.1,
             body_color=ROW_COLORS[row % len(ROW_COLORS)],
         )
-        shape.material = Materials.WOOD
+        shape.material = Materials.RUBBER
 
 # ── Gravity (applied to all bodies currently in renderer._records) ────────────
 # The anchor is not in _records, so it is unaffected.

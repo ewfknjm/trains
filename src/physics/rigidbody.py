@@ -2,7 +2,7 @@ import numpy as np
 from .quaternions import Quaternion
 from .transform import Transform4x4
 
-INITIAL_SLEEP_MOTION = 0.29
+INITIAL_SLEEP_MOTION = 0.3
 
 
 class RigidBody:
