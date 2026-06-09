@@ -347,11 +347,13 @@ class Box(Primitive):
                 incident_box = box
                 reference_axis_index = best_index
                 reference_outwards_normal = -normal
+                contact_normal = normal
             else:
                 reference_box = box
                 incident_box = self
                 reference_axis_index = best_index - 3
                 reference_outwards_normal = normal
+                contact_normal = -normal
 
             incident_face = Sutherland_Hodgman.get_incident_face_vertices(
                 incident_box, reference_outwards_normal
@@ -362,7 +364,7 @@ class Box(Primitive):
                 incident_face,
                 reference_axis_index,
                 reference_outwards_normal,
-                normal,
+                contact_normal,
                 data,
                 restitution,
                 friction,

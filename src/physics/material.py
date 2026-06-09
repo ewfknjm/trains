@@ -15,7 +15,7 @@ class PhysicsMaterial:
 
 
 class Materials:
-    DEFAULT = PhysicsMaterial(restitution=0.4, friction=0.5)
+    DEFAULT = PhysicsMaterial(restitution=0.5, friction=0.5)
     STEEL = PhysicsMaterial(restitution=0.2, friction=0.3)
     RUBBER = PhysicsMaterial(restitution=0.7, friction=0.8)
     WOOD = PhysicsMaterial(restitution=0.3, friction=0.5)

@@ -269,12 +269,12 @@ class DebugRenderer:
             )
         return "\n".join(lines)
 
+    def input(self, key):
+        if key == "space":
+            self._paused = not self._paused
+
     def run(self, dt_fixed: float = 1 / 60, sub_steps: int = 1) -> None:
         renderer = self
-
-        def input(key):
-            if key == "space":
-                renderer._paused = not renderer._paused
 
         def update():
             if not renderer._paused:

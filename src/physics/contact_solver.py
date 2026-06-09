@@ -5,7 +5,7 @@ from .contact import Contact, ContactData, get_contact_basis
 from .rigidbody import RigidBody
 import math
 
-ANGULAR_LIMIT_CONSTANT = 0.2
+ANGULAR_LIMIT_CONSTANT = 0.05
 STATIC_FRICTION_RATIO = 1.2
 
 
@@ -56,6 +56,9 @@ class PreparedContact:
             )
 
     def apply_position_change(self, depth: float):
+        PENETRATION_SLOP = 0.01
+        depth -= PENETRATION_SLOP
+
         c = self.contact
         n = c.contact_normal
 
