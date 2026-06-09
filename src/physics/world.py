@@ -48,6 +48,10 @@ class World:
     def remove_rigid_body(self, body: RigidBody) -> None:
         self._rb_registrations.remove(body)
         self._shapes.pop(id(body), None)
+        self._force_registry.deregister_all_generators(body)
+        if self._broad_phase.contains(body):
+            leaf = self._broad_phase._body_to_leaf[id(body)]
+            self._broad_phase.remove(leaf)
 
     def add_force_generators(self, body: RigidBody, force_generator: ForceGenerator):
         self._force_registry.register_force_generator(body, force_generator)
@@ -56,6 +60,8 @@ class World:
         self._broad_phase.clear()
         for body in self._rb_registrations:
             if id(body) not in self._shapes:
+                continue
+            if body.is_sleeping and self._broad_phase.contains(body):
                 continue
             volume = self._volume_for(body)
             self._broad_phase.insert(body, volume)

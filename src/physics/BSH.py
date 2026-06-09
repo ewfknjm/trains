@@ -73,9 +73,11 @@ class BSHTree(BroadPhase):
     def __init__(self, usage_limit: int):
         self.root: BSHNode | None = None
         self._usage_limit = usage_limit
+        self._body_to_leaf: dict[int, BSHNode] = {}
 
     def clear(self) -> None:
         self.root = None
+        self._body_to_leaf.clear()
 
     def get_candidate_pairs(self) -> list[CandidatePair]:
         pairs: list[CandidatePair] = []
@@ -130,6 +132,7 @@ class BSHTree(BroadPhase):
 
     def insert(self, body: RigidBody, volume: BoundingSphere):
         new_leaf = BSHNode(volume=volume, body=body)
+        self._body_to_leaf[id(body)] = new_leaf
 
         if self.root is None:
             self.root = new_leaf
@@ -176,9 +179,12 @@ class BSHTree(BroadPhase):
         self._refit_spheres(new_internal.parent)
 
     def remove(self, removed_leaf: BSHNode):
+        if removed_leaf.body is not None:
+            self._body_to_leaf.pop(id(removed_leaf.body), None)
+
         if not self.root:
             return
-        if self.root == removed_leaf:
+        if self.root is removed_leaf:
             self.root = None
             return
 
@@ -215,3 +221,12 @@ class BSHTree(BroadPhase):
                     current.left.volume, current.right.volume
                 )
             current = current.parent
+
+    def update_body(self, body: RigidBody, new_volume: BoundingSphere) -> None:
+        leaf = self._body_to_leaf.get(id(body))
+        if leaf is not None:
+            self.remove(leaf)
+        self.insert(body, new_volume)
+
+    def contains(self, body: RigidBody) -> bool:
+        return id(body) in self._body_to_leaf

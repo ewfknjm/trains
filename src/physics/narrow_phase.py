@@ -6,7 +6,7 @@ import itertools
 from typing import Optional
 
 from .material import PhysicsMaterial, Materials
-from physics.BSH import BoundingSphere
+from .BSH import BoundingSphere
 from .rigidbody import RigidBody
 from .contact import ContactData, Contact
 
@@ -348,8 +348,8 @@ class Box(Primitive):
                 reference_axis_index = best_index
                 reference_outwards_normal = -normal
             else:
-                reference_box = self
-                incident_box = box
+                reference_box = box
+                incident_box = self
                 reference_axis_index = best_index - 3
                 reference_outwards_normal = normal
 

@@ -23,37 +23,41 @@ class Spring(ForceGenerator):
     def __init__(
         self,
         other: RigidBody,
-        local_p1: np.ndarray,
-        local_p2: np.ndarray,
+        my_connection_point: np.ndarray,
+        other_connection_point: np.ndarray,
         spring_constant: float,
         natural_length: float,
     ):
-        self.local_connection_point: np.ndarray = local_p1
-        self.local_other_connection_point: np.ndarray = local_p2
-        self.other: RigidBody = other
-        self.spring_constant: float = spring_constant
-        self.natural_length: float = natural_length
+        self._other = other
+        self._my_pt = my_connection_point
+        self._other_pt = other_connection_point
+        self._k = spring_constant
+        self._L = natural_length
 
     def update_force(self, body: RigidBody, dt: float) -> None:
-        other = self.other
-
-        transform_matrix_Body = Transform4x4(body.transform_matrix)
-        transform_matrix_Other = Transform4x4(other.transform_matrix)
-
-        world_p1 = transform_matrix_Body.local_to_world(self.local_connection_point)
-        world_p2 = transform_matrix_Other.local_to_world(
-            self.local_other_connection_point
+        world_p1 = Transform4x4(body.transform_matrix).local_to_world(self._my_pt)
+        world_p2 = Transform4x4(self._other.transform_matrix).local_to_world(
+            self._other_pt
         )
 
-        displacement = world_p1 - world_p2  # P2 -> P1
+        displacement = world_p1 - world_p2
         distance = np.linalg.norm(displacement)
-
         if np.isclose(distance, 0.0):
             return
 
         direction = displacement / distance
-        magnitude = -self.spring_constant * (distance - self.natural_length)
-        force = magnitude * direction
-
+        force = -self._k * (distance - self._L) * direction
         body.add_force_to_point(force, world_p1)
-        other.add_force_to_point(-force, world_p2)
+
+
+def make_spring_pair(
+    body_a: RigidBody,
+    body_b: RigidBody,
+    local_p1: np.ndarray,
+    local_p2: np.ndarray,
+    spring_constant: float,
+    natural_length: float,
+) -> tuple[Spring, Spring]:
+    gen_a = Spring(body_b, local_p1, local_p2, spring_constant, natural_length)
+    gen_b = Spring(body_a, local_p2, local_p1, spring_constant, natural_length)
+    return gen_a, gen_b
