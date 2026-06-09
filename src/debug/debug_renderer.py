@@ -119,7 +119,7 @@ class DebugRenderer:
             dt=1 / 60,
         )
         world = World(
-            usage_limit=1024,
+            usage_limit=4024,
             contact_data=contact_data,
             resolver=resolver,
         )

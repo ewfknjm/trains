@@ -35,7 +35,7 @@ class RigidBody:
 
         self.can_sleep: bool = True
         self.is_sleeping: bool = False
-        self.sleep_motion_threshold: float = 0.3
+        self.sleep_motion_threshold: float = 0.1
         self.motion: float = INITIAL_SLEEP_MOTION
 
     def set_awake(self) -> None:

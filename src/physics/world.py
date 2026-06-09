@@ -61,7 +61,7 @@ class World:
         for body in self._rb_registrations:
             if id(body) not in self._shapes:
                 continue
-            if body.is_sleeping and self._broad_phase.contains(body):
+            if body.is_sleeping:
                 continue
             volume = self._volume_for(body)
             self._broad_phase.insert(body, volume)
@@ -76,7 +76,10 @@ class World:
                     sa.collide_with(sb, self._contact_data, e, mu)
 
     def _static_narrow_phase_pass(self) -> None:
-        for body_shapes in self._shapes.values():
+        for body in self._rb_registrations:
+            if body.is_sleeping:
+                continue
+            body_shapes = self._shapes.get(id(body), [])
             for shape in body_shapes:
                 for plane in self._static_planes:
                     e, mu = shape.material.mix(plane.material)

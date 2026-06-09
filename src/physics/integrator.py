@@ -1,7 +1,7 @@
 import numpy as np
 from .rigidbody import RigidBody
 
-SLEEP_BIAS = 0.8
+SLEEP_BIAS = 0.5
 
 
 class EulerIntegrator:
@@ -45,7 +45,8 @@ class EulerIntegrator:
             current_motion = float(
                 np.dot(body.velocity, body.velocity) + np.dot(body.omega, body.omega)
             )
-            body.motion = SLEEP_BIAS * body.motion + (1.0 - SLEEP_BIAS) * current_motion
+            bias = SLEEP_BIAS**dt
+            body.motion = bias * body.motion + (1.0 - bias) * current_motion
 
             if body.motion < body.sleep_motion_threshold:
                 body.set_sleeping()

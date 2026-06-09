@@ -181,9 +181,11 @@ class ContactResolver:
 
         for contact in data.contacts:
             if contact.body_a.is_sleeping:
-                contact.body_a.set_awake()
+                if contact.body_b is not None and not contact.body_b.is_sleeping:
+                    contact.body_a.set_awake()
             if contact.body_b is not None and contact.body_b.is_sleeping:
-                contact.body_b.set_awake()
+                if not contact.body_a.is_sleeping:
+                    contact.body_b.set_awake()
 
         prepared = prepare_contacts(data.contacts)
         self._resolve_velocities(prepared, self.dt)
