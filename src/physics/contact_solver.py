@@ -204,6 +204,12 @@ class ContactResolver:
         if not data.contacts:
             return
 
+        for contact in data.contacts:
+            if contact.body_a.is_sleeping:
+                contact.body_a.set_awake()
+            if contact.body_b is not None and contact.body_b.is_sleeping:
+                contact.body_b.set_awake()
+
         prepared = prepare_contacts(data.contacts)
         self._resolve_velocities(prepared, self.dt)
         self._resolve_penetrations(prepared)
@@ -274,6 +280,9 @@ class ContactResolver:
             b_acceleration = (
                 c.body_b.last_frame_acceleration if c.body_b else np.zeros(3)
             )
+
+            if worst_contact.contact_basis is None:
+                raise ValueError("prepare contacts first")
 
             accel_velocity = (a_acceleration - b_acceleration) * dt
             accel_contact = worst_contact.contact_basis @ accel_velocity

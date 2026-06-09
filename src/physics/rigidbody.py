@@ -2,6 +2,8 @@ import numpy as np
 from .quaternions import Quaternion
 from .transform import Transform4x4
 
+INITIAL_SLEEP_MOTION = 3.0
+
 
 class RigidBody:
     def __init__(self, x: float = 0.0, y: float = 0.0, z: float = 0.0):
@@ -30,6 +32,22 @@ class RigidBody:
         self.torque_accum: np.ndarray = np.zeros(3, dtype="float")
 
         self._dirty = True
+
+        self.can_sleep: bool = True
+        self.is_sleeping: bool = False
+        self.sleep_motion_threshold: float = 0.3
+        self.motion: float = INITIAL_SLEEP_MOTION
+
+    def set_awake(self) -> None:
+        self.is_sleeping = False
+        self.motion = INITIAL_SLEEP_MOTION
+
+    def set_sleeping(self) -> None:
+        if not self.can_sleep:
+            return
+        self.is_sleeping = True
+        self.velocity[:] = 0.0
+        self.omega[:] = 0.0
 
     @property
     def inertia_tensor(self) -> np.ndarray:

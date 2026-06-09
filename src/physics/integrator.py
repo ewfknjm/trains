@@ -1,10 +1,15 @@
 import numpy as np
 from .rigidbody import RigidBody
 
+SLEEP_BIAS = 0.8
+
 
 class EulerIntegrator:
     @staticmethod
     def integrate(body: RigidBody, dt: float) -> None:
+        if body.is_sleeping:
+            return
+
         body.last_frame_acceleration = body.acceleration.copy()
         body.acceleration = body.force_accum * body.inverse_mass
         body.velocity += body.acceleration * dt
@@ -35,3 +40,9 @@ class EulerIntegrator:
         body.orientation.add_scaled_vector(body.omega, dt)
 
         body.mark_dirty()
+
+        if body.can_sleep:
+            current_motion = float(
+                np.dot(body.velocity, body.velocity) + np.dot(body.omega, body.omega)
+            )
+            body.motion = SLEEP_BIAS * body.motion + (1.0 - SLEEP_BIAS) * current_motion
