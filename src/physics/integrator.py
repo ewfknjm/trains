@@ -1,7 +1,7 @@
 import numpy as np
 from .rigidbody import RigidBody
 
-SLEEP_BIAS = 0.5
+SLEEP_BIAS = 0.1
 
 
 class EulerIntegrator:

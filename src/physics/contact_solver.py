@@ -170,25 +170,38 @@ def prepare_contacts(contacts: list[Contact]) -> list[PreparedContact]:
 
 
 class ContactResolver:
-    def __init__(self, velocity_iterations: int, position_iterations: int, dt: float):
+    def __init__(self, velocity_iterations: int, position_iterations: int):
         self.velocity_iterations = velocity_iterations
         self.position_iterations = position_iterations
-        self.dt = dt
 
-    def resolve(self, data: ContactData):
+    def resolve(self, data: ContactData, dt: float):
         if not data.contacts:
             return
 
         for contact in data.contacts:
+            # Only wake a sleeping body when the *other* (awake) body is energetic
+            # enough to matter.  Resting/settling contacts (gravity-induced velocity
+            # ~g*dt ≈ 0.02 m/s) have motion well below the sleep threshold and must
+            # not cascade-reset sleeping neighbours' motion counters.
             if contact.body_a.is_sleeping:
                 if contact.body_b is not None and not contact.body_b.is_sleeping:
-                    contact.body_a.set_awake()
+                    awake_motion = float(
+                        np.dot(contact.body_b.velocity, contact.body_b.velocity)
+                        + np.dot(contact.body_b.omega, contact.body_b.omega)
+                    )
+                    if awake_motion > contact.body_a.sleep_motion_threshold:
+                        contact.body_a.set_awake()
             if contact.body_b is not None and contact.body_b.is_sleeping:
                 if not contact.body_a.is_sleeping:
-                    contact.body_b.set_awake()
+                    awake_motion = float(
+                        np.dot(contact.body_a.velocity, contact.body_a.velocity)
+                        + np.dot(contact.body_a.omega, contact.body_a.omega)
+                    )
+                    if awake_motion > contact.body_b.sleep_motion_threshold:
+                        contact.body_b.set_awake()
 
         prepared = prepare_contacts(data.contacts)
-        self._resolve_velocities(prepared, self.dt)
+        self._resolve_velocities(prepared, dt)
         self._resolve_penetrations(prepared)
 
     def _resolve_penetrations(self, prepared_contacts: list[PreparedContact]):

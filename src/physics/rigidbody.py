@@ -2,7 +2,7 @@ import numpy as np
 from .quaternions import Quaternion
 from .transform import Transform4x4
 
-INITIAL_SLEEP_MOTION = 3.0
+INITIAL_SLEEP_MOTION = 0.29
 
 
 class RigidBody:
@@ -35,7 +35,7 @@ class RigidBody:
 
         self.can_sleep: bool = True
         self.is_sleeping: bool = False
-        self.sleep_motion_threshold: float = 0.1
+        self.sleep_motion_threshold: float = 0.3
         self.motion: float = INITIAL_SLEEP_MOTION
 
     def set_awake(self) -> None:

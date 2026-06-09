@@ -116,7 +116,6 @@ class DebugRenderer:
         resolver = ContactResolver(
             velocity_iterations=velocity_iters,
             position_iterations=position_iters,
-            dt=1 / 60,
         )
         world = World(
             usage_limit=4024,
@@ -294,4 +293,4 @@ class DebugRenderer:
         caller_frame = sys._getframe(1)
         caller_frame.f_globals["update"] = update
 
-        self._app.run()
+        self._app.run(info=False)
