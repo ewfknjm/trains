@@ -588,7 +588,7 @@ class Sutherland_Hodgman:
         crossings = mask ^ shifted_mask
 
         start_distances = distances[crossings]
-        end_distances = distances[next_index]
+        end_distances = distances[next_index][crossings]
 
         shifted_polygon = polygon[next_index]
         t = start_distances / (start_distances - end_distances)
