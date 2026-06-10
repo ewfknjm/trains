@@ -61,15 +61,11 @@ class World:
         for body in self._rb_registrations:
             if id(body) not in self._shapes:
                 continue
-            # Include sleeping bodies so that awake bodies can collide with them
-            # and the resolver can wake them up.
             volume = self._volume_for(body)
             self._broad_phase.insert(body, volume)
 
     def _narrow_phase_pass(self, pairs: list[CandidatePair]) -> None:
         for pair in pairs:
-            # Two sleeping bodies have no relative motion; no contact needs resolving.
-            # Skipping them here is the main performance win once the scene settles.
             if pair.our_body.is_sleeping and pair.other_body.is_sleeping:
                 continue
             shapes_a = self._shapes.get(id(pair.our_body), [])

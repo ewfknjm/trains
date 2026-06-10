@@ -8,7 +8,7 @@ from typing import Optional
 from .material import PhysicsMaterial, Materials
 from .BSH import BoundingSphere
 from .rigidbody import RigidBody
-from .contact import ContactData, Contact
+from .contact import ClipVertex, ContactData, Contact, FeatureID
 
 
 class Shape(ABC):
@@ -85,16 +85,24 @@ class Sphere(Primitive):
             penetration = radii_sum - magnitude
             contact_point = position_two + contact_normal * sphere.radius
 
-        current = Contact(
-            self.body,
-            sphere.body,
-            contact_point,
-            contact_normal,
-            float(penetration),
-            restitution,
-            friction,
+        local_a = self.body.transform_matrix[:3, :3].T @ (
+            contact_point - self.body.position
         )
-        data.add_contact(current)
+        local_b = sphere.body.transform_matrix[:3, :3].T @ (
+            contact_point - sphere.body.position
+        )
+
+        current = Contact(
+            local_point_a=local_a,
+            local_point_b=local_b,
+            world_point=contact_point,
+            world_normal=contact_normal,
+            penetration=float(penetration),
+            feature_id=None,
+        )
+        manifold = data.get_manifold(self.body, sphere.body, restitution, friction)
+        manifold.add_contact(current)
+        data.contacts.append(current)
 
     def collide_with_box(
         self, box: Box, data: ContactData, restitution: float, friction: float
@@ -118,16 +126,20 @@ class Sphere(Primitive):
         surface_of_half_space = sphere_position_vector - (
             plane.normal * (distance + self.radius)
         )
-        current = Contact(
-            self.body,
-            None,
-            surface_of_half_space,
-            plane.normal,
-            float(-distance),
-            restitution,
-            friction,
+        local_a = self.body.transform_matrix[:3, :3].T @ (
+            surface_of_half_space - self.body.position
         )
-        data.add_contact(current)
+        current = Contact(
+            local_point_a=local_a,
+            local_point_b=None,
+            world_point=surface_of_half_space,
+            world_normal=plane.normal,
+            penetration=float(-distance),
+            feature_id=None,
+        )
+        manifold = data.get_manifold(self.body, None, restitution, friction)
+        manifold.add_contact(current)
+        data.contacts.append(current)
 
     def bounding_sphere(self) -> BoundingSphere:
         return BoundingSphere(radius=self.radius, center=self.get_axis(3).copy())
@@ -228,16 +240,23 @@ class Box(Primitive):
             normal = direction / magnitude
             penetration = float(sphere.radius - distance)
 
-        current = Contact(
-            self.body,
-            sphere.body,
-            world_closest_pt,
-            normal,
-            penetration,
-            restitution,
-            friction,
+        local_a = self.body.transform_matrix[:3, :3].T @ (
+            world_closest_pt - self.body.position
         )
-        data.add_contact(current)
+        local_b = sphere.body.transform_matrix[:3, :3].T @ (
+            world_closest_pt - sphere.body.position
+        )
+        current = Contact(
+            local_point_a=local_a,
+            local_point_b=local_b,
+            world_point=world_closest_pt,
+            world_normal=normal,
+            penetration=penetration,
+            feature_id=None,
+        )
+        manifold = data.get_manifold(self.body, sphere.body, restitution, friction)
+        manifold.add_contact(current)
+        data.contacts.append(current)
 
     def collide_with_box(
         self, box: Box, data: ContactData, restitution: float, friction: float
@@ -412,16 +431,24 @@ class Box(Primitive):
         closest_two = world_pt_two + t_two * dir_two
 
         contact_point = (closest_one + closest_two) * 0.5
-        current = Contact(
-            self.body,
-            box.body,
-            contact_point,
-            normal,
-            penetration,
-            restitution,
-            friction,
+        local_a = self.body.transform_matrix[:3, :3].T @ (
+            contact_point - self.body.position
         )
-        data.add_contact(current)
+        local_b = box.body.transform_matrix[:3, :3].T @ (
+            contact_point - box.body.position
+        )
+        feature_id = FeatureID(axis_one=axis_one_index, axis_two=axis_two_index)
+        current = Contact(
+            local_point_a=local_a,
+            local_point_b=local_b,
+            world_point=contact_point,
+            world_normal=normal,
+            penetration=penetration,
+            feature_id=feature_id,
+        )
+        manifold = data.get_manifold(self.body, box.body, restitution, friction)
+        manifold.add_contact(current)
+        data.contacts.append(current)
 
     def collide_with_plane(
         self, plane: Plane, data: ContactData, restitution: float, friction: float
@@ -459,18 +486,28 @@ class Box(Primitive):
         valid_positions = world_positions[mask]
         normal = plane.normal
 
-        for world_position, penetration in zip(valid_positions, penetrations):
-            current = Contact(
-                self.body,
-                None,
-                world_position,
-                normal,
-                penetration,
-                restitution,
-                friction,
-            )
-            if not data.add_contact(current):
+        valid_indices = np.where(mask)[0]
+        manifold = data.get_manifold(self.body, None, restitution, friction)
+
+        for world_position, penetration, v_idx in zip(
+            valid_positions, penetrations, valid_indices
+        ):
+            if data.is_full:
                 break
+            local_a = self.body.transform_matrix[:3, :3].T @ (
+                world_position - self.body.position
+            )
+            f_id = FeatureID(incident_vertex_index=int(v_idx))
+            current = Contact(
+                local_point_a=local_a,
+                local_point_b=None,
+                world_point=world_position,
+                world_normal=normal,
+                penetration=penetration,
+                feature_id=f_id,
+            )
+            manifold.add_contact(current)
+            data.contacts.append(current)
 
     def bounding_sphere(self) -> BoundingSphere:
         if self._half_size is None:
@@ -482,7 +519,7 @@ class Box(Primitive):
 @dataclass
 class Sutherland_Hodgman:
     @staticmethod
-    def get_incident_face_vertices(box: Box, normal: np.ndarray) -> np.ndarray:
+    def get_incident_face_vertices(box: Box, normal: np.ndarray) -> list[ClipVertex]:
         transform = box.get_transform()
         axes = transform[:3, :3].T
 
@@ -493,8 +530,13 @@ class Sutherland_Hodgman:
         if direction == 0:
             direction = 1.0
 
-        face_signs = BOX_SIGNS[BOX_SIGNS[:, incident_index] == direction]
-        face_signs = face_signs[[0, 1, 3, 2]]
+        mask = BOX_SIGNS[:, incident_index] == direction
+        vertex_indices = np.where(mask)[0]
+
+        order = [0, 1, 3, 2]
+        ordered_indices = vertex_indices[order]
+
+        face_signs = BOX_SIGNS[ordered_indices]
         local_vertices = face_signs * box.half_size
 
         num_vertices = local_vertices.shape[0]
@@ -502,13 +544,19 @@ class Sutherland_Hodgman:
         local_homogenous = np.hstack((local_vertices, ones))
 
         world_vertices = (transform @ local_homogenous.T).T[:, :3]
-        return world_vertices
+
+        clip_vertices = []
+        for i in range(4):
+            feature_id = FeatureID(incident_vertex_index=int(ordered_indices[i]))
+            clip_vertices.append(ClipVertex(world_vertices[i], feature_id))
+
+        return clip_vertices
 
     @staticmethod
     def clip_and_generate_contacts(
         reference_box: Box,
         incident_box: Box,
-        incident_face: np.ndarray,
+        incident_face: list[ClipVertex],
         reference_axis_index: int,
         reference_outwards_normal: np.ndarray,
         final_contact_normal: np.ndarray,
@@ -535,12 +583,12 @@ class Sutherland_Hodgman:
 
             offset_position = (reference_box_center @ axis) + half_size
             current_polygon = Sutherland_Hodgman._clip_polygon_against_plane(
-                current_polygon, axis, offset_position
+                current_polygon, axis, offset_position, reference_axis_index
             )
 
             offset_position = -(reference_box_center @ axis) + half_size
             current_polygon = Sutherland_Hodgman._clip_polygon_against_plane(
-                current_polygon, -axis, offset_position
+                current_polygon, -axis, offset_position, reference_axis_index
             )
 
             if len(current_polygon) == 0:
@@ -549,63 +597,122 @@ class Sutherland_Hodgman:
         reference_face_offset = (
             reference_box_center @ reference_outwards_normal
         ) + reference_box.half_size[reference_axis_index]
-        distance = (current_polygon @ reference_outwards_normal) - reference_face_offset
-        mask = distance <= 0.0
 
-        valid_contacts = current_polygon[mask]
-        valid_distances = distance[mask]
-        for contact, dist in zip(valid_contacts, valid_distances):
-            current = Contact(
-                reference_box.body,
-                incident_box.body,
-                contact,
-                final_contact_normal,
-                float(-dist),
-                restitution,
-                friction,
+        manifold = data.get_manifold(
+            reference_box.body, incident_box.body, restitution, friction
+        )
+
+        raw_contacts = []
+        for polygon in current_polygon:
+            distance = (
+                polygon.world_position @ reference_outwards_normal
+                - reference_face_offset
             )
-            if not data.add_contact(current):
+            if distance > 0.0:
+                continue
+            raw_contacts.append((polygon, float(-distance)))
+
+        if len(raw_contacts) > 4:
+            raw_contacts.sort(key=lambda x: x[1], reverse=True)
+            deepest = raw_contacts[0]
+
+            max_dist = -1
+            farthest1_idx = 1
+            for i in range(1, len(raw_contacts)):
+                dist = np.linalg.norm(
+                    raw_contacts[i][0].world_position - deepest[0].world_position
+                )
+                if dist > max_dist:
+                    max_dist = dist
+                    farthest1_idx = i
+            farthest1 = raw_contacts.pop(farthest1_idx)
+
+            max_area = -1
+            farthest2_idx = 1
+            for i in range(1, len(raw_contacts)):
+                area = np.linalg.norm(
+                    np.cross(
+                        raw_contacts[i][0].world_position - deepest[0].world_position,
+                        farthest1[0].world_position - deepest[0].world_position,
+                    )
+                )
+                if area > max_area:
+                    max_area = area
+                    farthest2_idx = i
+            farthest2 = raw_contacts.pop(farthest2_idx)
+
+            max_area = -1
+            farthest3_idx = 1
+            for i in range(1, len(raw_contacts)):
+                area = np.linalg.norm(
+                    np.cross(
+                        raw_contacts[i][0].world_position - farthest1[0].world_position,
+                        farthest2[0].world_position - farthest1[0].world_position,
+                    )
+                )
+                if area > max_area:
+                    max_area = area
+                    farthest3_idx = i
+            farthest3 = raw_contacts.pop(farthest3_idx)
+
+            raw_contacts = [deepest, farthest1, farthest2, farthest3]
+
+        for polygon, penetration in raw_contacts:
+            if data.is_full:
                 break
+
+            local_a = reference_box.body.transform_matrix[:3, :3].T @ (
+                polygon.world_position - reference_box.body.position
+            )
+            local_b = incident_box.body.transform_matrix[:3, :3].T @ (
+                polygon.world_position - incident_box.body.position
+            )
+
+            current = Contact(
+                local_point_a=local_a,
+                local_point_b=local_b,
+                world_point=polygon.world_position,
+                world_normal=final_contact_normal,
+                penetration=penetration,
+                feature_id=polygon.feature_id,
+            )
+            manifold.add_contact(current)
+            data.contacts.append(current)
 
     @staticmethod
     def _clip_polygon_against_plane(
-        polygon: np.ndarray, plane_normal: np.ndarray, plane_offset: float
-    ) -> np.ndarray:
-        if len(polygon) == 0:
-            return polygon
+        polygon: list[ClipVertex],
+        plane_normal: np.ndarray,
+        plane_offset: float,
+        reference_face_index: int,
+    ) -> list[ClipVertex]:
+        if not polygon:
+            return []
 
-        distances = polygon @ plane_normal - plane_offset
-        mask = distances <= 0
+        clipped_polygon = []
 
-        if mask.all():
-            return polygon
-        if not mask.any():
-            return np.empty((0, 3))
+        prev_vertex = polygon[-1]
+        prev_dist = np.dot(prev_vertex.world_position, plane_normal) - plane_offset
 
-        N = len(polygon)
-        next_index = np.arange(N)
-        next_index = np.roll(next_index, -1, axis=0)
+        for curr_vertex in polygon:
+            curr_dist = np.dot(curr_vertex.world_position, plane_normal) - plane_offset
 
-        shifted_mask = mask[next_index]
-        crossings = mask ^ shifted_mask
+            if (prev_dist <= 0 and curr_dist > 0) or (prev_dist > 0 and curr_dist <= 0):
+                t = prev_dist / (prev_dist - curr_dist)
 
-        start_distances = distances[crossings]
-        end_distances = distances[next_index][crossings]
+                intersect_pos = prev_vertex.world_position + t * (
+                    curr_vertex.world_position - prev_vertex.world_position
+                )
+                intersect_id = FeatureID(
+                    reference_face_index=reference_face_index,
+                    incident_vertex_index=prev_vertex.feature_id.incident_vertex_index,
+                )
+                clipped_polygon.append(ClipVertex(intersect_pos, intersect_id))
 
-        shifted_polygon = polygon[next_index]
-        t = start_distances / (start_distances - end_distances)
-        start = polygon[crossings]
-        end = shifted_polygon[crossings]
-        intersections = start + t[:, np.newaxis] * (end - start)
+            if curr_dist <= 0:
+                clipped_polygon.append(curr_vertex)
 
-        output = np.zeros((N, 2, 3))
-        valid = np.zeros((N, 2), dtype=bool)
+            prev_vertex = curr_vertex
+            prev_dist = curr_dist
 
-        output[crossings, 0] = intersections
-        valid[crossings, 0] = True
-
-        output[shifted_mask, 1] = shifted_polygon[shifted_mask]
-        valid[shifted_mask, 1] = True
-
-        clipped_polygon = output[valid]
         return clipped_polygon

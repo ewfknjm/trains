@@ -14,8 +14,6 @@ from physics.contact_solver import ContactResolver
 from physics.narrow_phase import Primitive, Sphere, Box
 
 
-# ── colour palette ──────────────────────────────────────────────────────────
-
 COLOURS = [
     color.cyan,
     color.orange,
@@ -28,12 +26,10 @@ COLOURS = [
 ]
 
 
-# ── shape → Ursina entity factory ───────────────────────────────────────────
-
 
 def _make_entity(shape: Primitive) -> Entity:
     if isinstance(shape, Sphere):
-        return Entity(model="sphere", scale=Vec3(shape.radius * 2) * 1)  # diameter
+        return Entity(model="sphere", scale=Vec3(shape.radius * 2) * 1)
     elif isinstance(shape, Box):
         if shape.half_size is None:
             raise ValueError("Box has no half_size set")
@@ -43,11 +39,8 @@ def _make_entity(shape: Primitive) -> Entity:
             scale=Vec3(float(hs[0] * 2), float(hs[1] * 2), float(hs[2] * 2)),
         )
     else:
-        # fallback: small marker sphere
         return Entity(model="sphere", scale=Vec3(0.15, 0.15, 0.15))
 
-
-# ── registration record ──────────────────────────────────────────────────────
 
 
 @dataclass
@@ -57,19 +50,9 @@ class _BodyRecord:
     entity: Entity
 
 
-# ── main class ───────────────────────────────────────────────────────────────
 
 
 class DebugRenderer:
-    """
-    Minimal Ursina wrapper. You register bodies; it draws them and syncs every frame.
-
-    Usage:
-        renderer = DebugRenderer.make()          # world + renderer with sensible defaults
-        body, box = renderer.add_box([0,5,0], half_size=[0.5,0.5,0.5])
-        renderer.run()
-    """
-
     def __init__(self, world: World, floor_y: float = 0.0, show_hud: bool = True):
         self._app = Ursina()
         EditorCamera()
@@ -102,8 +85,6 @@ class DebugRenderer:
             color=color.light_gray,
         )
 
-    # ── factory ──────────────────────────────────────────────────────────────
-
     @classmethod
     def make(
         cls,
@@ -124,8 +105,6 @@ class DebugRenderer:
         )
         return cls(world, floor_y=floor_y)
 
-    # ── registration ─────────────────────────────────────────────────────────
-
     def register(
         self,
         body: RigidBody,
@@ -144,8 +123,6 @@ class DebugRenderer:
         self._world.add_shape(body, shape)
         return entity
 
-    # ── convenience builders ─────────────────────────────────────────────────
-
     def add_box(
         self,
         position: list | np.ndarray,
@@ -162,7 +139,6 @@ class DebugRenderer:
 
         body = RigidBody(float(pos[0]), float(pos[1]), float(pos[2]))
         body.mass = mass
-        # solid box inertia tensor
         body.inertia_tensor = (
             (mass / 12.0)
             * np.diag(
@@ -173,7 +149,7 @@ class DebugRenderer:
                 ]
             )
             * 4
-        )  # 4 = (2hs)^2 factor
+        ) 
         body.linear_damping = 0.995
         body.angular_damping = 0.99
 
@@ -226,8 +202,6 @@ class DebugRenderer:
         )
         self._world.add_plane(plane)
 
-    # ── internal scene setup ─────────────────────────────────────────────────
-
     def _setup_floor(self, y: float) -> None:
         Entity(
             model="plane",
@@ -245,8 +219,6 @@ class DebugRenderer:
         ]:
             Entity(model="cube", color=col, scale=scale, position=pos)
 
-    # ── sync and loop ─────────────────────────────────────────────────────────
-
     def _sync_all(self) -> None:
         for rec in self._records:
             p = rec.body.position
@@ -258,7 +230,7 @@ class DebugRenderer:
 
     def _build_hud(self) -> str:
         lines = [f"{'PAUSED' if self._paused else 'running':^30}"]
-        for i, rec in enumerate(self._records[:6]):  # cap at 6 to avoid overflow
+        for i, rec in enumerate(self._records[:6]):
             b = rec.body
             p, v = b.position, b.velocity
             lines.append(
@@ -286,8 +258,6 @@ class DebugRenderer:
             if renderer._hud and renderer._show_hud:
                 renderer._hud.text = renderer._build_hud()
 
-        # Ursina picks up the module-level `update` function by name.
-        # We need to inject ours into the calling module's globals.
         import sys
 
         caller_frame = sys._getframe(1)

@@ -39,35 +39,85 @@ def get_contact_basis(normal: np.ndarray) -> np.ndarray:
 # -------------------- end of helper functions -------------------------------------- #
 
 
+@dataclass(frozen=True)
+class FeatureID:
+    reference_face_index: int | None = None
+    incident_vertex_index: int | None = None
+    axis_one: int | None = None
+    axis_two: int | None = None
+
+
+@dataclass
+class ClipVertex:
+    world_position: np.ndarray
+    feature_id: FeatureID
+
+
 @dataclass
 class Contact:
+    local_point_a: np.ndarray
+    local_point_b: Optional[np.ndarray]
+    world_point: np.ndarray
+    world_normal: np.ndarray
+    penetration: float
+    feature_id: FeatureID | None
+
+    normal_impulse: float = 0.0
+    tangent_impulse_1: float = 0.0
+    tangent_impulse_2: float = 0.0
+
+
+@dataclass
+class ContactManifold:
     body_a: RigidBody
     body_b: Optional[RigidBody]
-    contact_point: np.ndarray
-    contact_normal: np.ndarray
-    contact_penetration: float
-    collision_restitution: float
-    coefficient_of_friction: float
+    restitution: float
+    friction: float
+    contacts: dict[FeatureID | None, Contact] = field(default_factory=dict)
+
+    def add_contact(self, contact: Contact):
+        if contact.feature_id in self.contacts:
+            old_contact = self.contacts[contact.feature_id]
+            contact.normal_impulse = old_contact.normal_impulse
+            contact.tangent_impulse_1 = old_contact.tangent_impulse_1
+            contact.tangent_impulse_2 = old_contact.tangent_impulse_2
+        self.contacts[contact.feature_id] = contact
 
 
 @dataclass
 class ContactData:
     max_contacts: int
+    manifolds: dict[tuple[int, int], ContactManifold] = field(default_factory=dict)
     contacts: list[Contact] = field(default_factory=list)
 
     @property
     def contact_count(self) -> int:
-        return len(self.contacts)
+        return sum(len(m.contacts) for m in self.manifolds.values())
 
     @property
     def is_full(self) -> bool:
-        return len(self.contacts) >= self.max_contacts
+        return self.contact_count >= self.max_contacts
 
-    def add_contact(self, contact: Contact) -> bool:
-        if self.is_full:
-            return False
-        self.contacts.append(contact)
-        return True
+    def get_manifold(
+        self,
+        body_a: RigidBody,
+        body_b: Optional[RigidBody],
+        restitution: float,
+        friction: float,
+    ) -> ContactManifold:
+        a_id = id(body_a)
+        b_id = id(body_b) if body_b else 0
+        pair = (a_id, b_id)
+        if pair not in self.manifolds:
+            self.manifolds[pair] = ContactManifold(
+                body_a, body_b, restitution, friction
+            )
+        else:
+            self.manifolds[pair].restitution = restitution
+            self.manifolds[pair].friction = friction
+        return self.manifolds[pair]
 
     def clear(self):
         self.contacts.clear()
+        for manifold in list(self.manifolds.values()):
+            manifold.contacts.clear()
