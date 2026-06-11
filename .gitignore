@@ -25,3 +25,4 @@ build/
 # Profiling output
 *.prof
 profile.json
+profile.svg
