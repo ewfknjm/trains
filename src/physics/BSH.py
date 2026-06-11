@@ -4,6 +4,7 @@ from .rigidbody import RigidBody
 from dataclasses import dataclass
 import numpy as np
 
+# No specific spot, AI assisted auditing the None conditions - notice the presence of like a billion if not None
 
 class BoundingSphere:
     def __init__(self, radius: float, center: np.ndarray) -> None:

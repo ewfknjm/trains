@@ -10,7 +10,6 @@ from .BSH import BoundingSphere
 from .rigidbody import RigidBody
 from .contact import ClipVertex, ContactData, Contact, FeatureID
 
-
 class Shape(ABC):
     @abstractmethod
     def collide_with(
@@ -37,7 +36,7 @@ class Shape(ABC):
 class Primitive(Shape):
     body: RigidBody
     offset_matrix: np.ndarray
-    _: KW_ONLY
+    _: KW_ONLY # *!* Material not strict requirement
     material: PhysicsMaterial = field(default_factory=lambda: Materials.DEFAULT)
 
     def get_transform(self) -> np.ndarray:
@@ -134,7 +133,7 @@ class Sphere(Primitive):
             surface_of_half_space,
             plane.normal,
             float(-distance),
-            None,
+            FeatureID(reference_face_index=0),
         )
         manifold = data.get_manifold(self.body, None, restitution, friction)
         manifold.add_contact(current)
@@ -258,6 +257,7 @@ class Box(Primitive):
     def collide_with_box(
         self, box: Box, data: ContactData, restitution: float, friction: float
     ) -> None:
+        # No specific point, but many AI assisted audits brought it to this state
         if self.half_size is None or box.half_size is None:
             return
 
@@ -329,7 +329,7 @@ class Box(Primitive):
             best_edge_index = int(np.argmin(edge_mask))
             best_edge_pen = edge_mask[best_edge_index]
 
-            is_barely_better = best_edge_pen > best_single_axis_pen - 1e-3
+            is_barely_better = best_edge_pen > best_single_axis_pen - 1e-3 # *!* recommended a second check
             is_nearly_parallel = norms[best_edge_index, 0] < 1e-3
 
             if is_barely_better or is_nearly_parallel:
@@ -504,7 +504,6 @@ class Box(Primitive):
             )
             manifold.add_contact(current)
 
-
     def bounding_sphere(self) -> BoundingSphere:
         if self._half_size is None:
             raise ValueError("half_size not set")
@@ -526,7 +525,7 @@ class Sutherland_Hodgman:
         if direction == 0:
             direction = 1.0
 
-        mask = BOX_SIGNS[:, incident_index] == direction
+        mask = BOX_SIGNS[:, incident_index] == direction # Not generated, knew the box signs, just didn't know the syntax
         vertex_indices = np.where(mask)[0]
 
         order = [0, 1, 3, 2]
@@ -598,6 +597,7 @@ class Sutherland_Hodgman:
             reference_box.body, incident_box.body, restitution, friction
         )
 
+        # start
         raw_contacts = []
         for polygon in current_polygon:
             distance = (
@@ -653,6 +653,9 @@ class Sutherland_Hodgman:
 
             raw_contacts = [deepest, farthest1, farthest2, farthest3]
 
+        # end
+        # most AI influenced part of the system. Not direct generation, but I had to refer several times - couldn't find many resources.
+
         for polygon, penetration in raw_contacts:
             if data.is_full:
                 break
@@ -673,7 +676,6 @@ class Sutherland_Hodgman:
                 polygon.feature_id,
             )
             manifold.add_contact(current)
-
 
     @staticmethod
     def _clip_polygon_against_plane(

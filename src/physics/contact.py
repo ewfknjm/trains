@@ -87,7 +87,8 @@ class ContactManifold:
 @dataclass
 class ContactData:
     max_contacts: int
-    manifolds: dict[tuple[int, int], ContactManifold] = field(default_factory=dict)
+    manifolds: dict[tuple[int, int], ContactManifold] = field(default_factory=dict) # *!*
+    # AI assisted help here, Pyright threw red text for a = body_a. Something about hashable.
 
     @property
     def contact_count(self) -> int:
@@ -104,8 +105,8 @@ class ContactData:
         restitution: float,
         friction: float,
     ) -> ContactManifold:
-        a_id = id(body_a)
-        b_id = id(body_b) if body_b else 0
+        a_id = id(body_a) # *!*
+        b_id = id(body_b) if body_b else 0 # *!*
         pair = (a_id, b_id)
         if pair not in self.manifolds:
             self.manifolds[pair] = ContactManifold(
@@ -117,7 +118,7 @@ class ContactData:
         return self.manifolds[pair]
 
     def merge_from(self, old: "ContactData") -> None:
-        for pair_key, manifold in self.manifolds.items():
+        for pair_key, manifold in self.manifolds.items(): # good friend google search
             old_manifold = old.manifolds.get(pair_key)
             if old_manifold is None:
                 continue

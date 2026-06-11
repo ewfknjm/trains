@@ -1,8 +1,52 @@
 # GAME PHYSICS ENGINE
-#### Video Demo: dsfasf
-#### Description: Simple Physics Engine
 
-## SRC/physics
+## About
+This project is for the final project of Harvard University's CS50x Introduction to Computer Science for the year 2026.
+
+It's a simple physics engine with one working demo. Albeit, it has the components to produce other demos. The demo provided is showcases some basic features of the engine - forces, contacts and shapes.
+
+The engine itself is heavily taken from Ian Millington's book *Game Physics Engine Development*, but does incorporate my own interpretation of some ideas.
+> Watch the demo [here](url)
+
+---
+
+## Features and implementation
+
+### Data structures and Algorithms
+- Separating-axis theorem test
+- Sutherland-Hodgman Algorithm
+- Bounding Sphere Hierarchy
+- Binary Spatial Partitions (although not used in the demo)
+
+### Physics and mathematics
+- Euler's method
+- Sequential Impulses (based on Box2D)
+- Gyroscopic effect is kept in
+
+#### note
+Some other demos exist in previous versions of the repository, but have been removed due to consideration of the **Academic Honesty Policy**.
+
+--- 
+
+## Usage
+From the root directory, you may run:
+> python demos/spring_and_buoyancy.py
+
+It's right mouse button to control the camera angle, and middle mouse button to move the camera.
+
+---
+
+## References
+- [Erin Catto 2006](https://box2d.org/files/ErinCatto_SequentialImpulses_GDC2006.pdf)
+- [Erin Catto 2014](https://box2d.org/files/ErinCatto_UnderstandingConstraints_GDC2014.pdf)
+- [Dirk Gregorious - Robust Contact Creation](https://media.steampowered.com/apps/valve/2015/DirkGregorius_Contacts.pdf)
+- Ian Millington, Game Physics Engine Development: 2nd Edition
+- [This video explains inertia tensors well](https://www.youtube.com/watch?v=GYc99lMdcFE)
+- Google AI Studio and GitHub Copilot - "*I've commented where there is direct involvement, but large majority is assisted learning and debugging*"
+
+---
+
+## SRC/physics - More details
 ### Quaternions, integrator and transform
 #### Quaternions
 This file contains the standard operations needed for the engine. It uses the scipy.spatial.rotation library to simplicity. It also has the added benefit of normalizing the quaternions, which prevent drift over time. add_scaled_vector is a method called when adjusting the orientation of rigid bodies, used in integrator.py. I chose quaternions to avoid gimbal lock associated with Euler angles. However, ursina mainly uses euler angles so this came with a drawback.
@@ -84,3 +128,10 @@ This file contains the dataclasses for contact_solver.py and narrow_phase.py, su
 #### contact_solver.py
 This file contains the contact resolution pipeline and all methods and algorithms associated. The current solver goes through three steps: Prepare data -> resolve velocities -> resolve penetrations. I cache some data because iterative calculation of them is too computationally intensive, and the small time step means that the engine is approximately believable, even with the constant values. If you are interested in performance, then there is a section about it at the end. The current approach uses a sequential impulse solver. Why? I wanted to understand more about the maths behind XPBD or GJK+EPA before implementing those algorithms. 
 
+---
+
+### Materials
+#### material.py
+This file contains basic material types for friction and restitution values.
+
+---

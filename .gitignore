@@ -21,3 +21,7 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+# Profiling output
+*.prof
+profile.json

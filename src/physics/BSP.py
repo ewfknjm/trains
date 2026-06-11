@@ -34,7 +34,7 @@ class BSPTree:
         if self.root is None:
             raise RuntimeError("BSPTree must be built before insertion")
 
-        nodes_to_process = [self.root]
+        nodes_to_process = [self.root] # *!* taught me about iterative methods
         while nodes_to_process:
             current = nodes_to_process.pop()
 
@@ -121,7 +121,7 @@ class BSPTree:
 
         leaves = self._collect_leaves()
         all_pairs: list[CandidatePair] = []
-        seen: set[tuple[int, int]] = set()
+        seen: set[tuple[int, int]] = set() # AI assisted audit signalled duplication, which I had forgotten
 
         for leaf in leaves:
             if len(leaf.active_bodies) < 2:

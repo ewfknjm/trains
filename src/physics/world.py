@@ -8,6 +8,7 @@ from .narrow_phase import Primitive, Plane
 from .broad_phase import CandidatePair
 from .BSH import BSHTree, BoundingSphere
 
+# Some AI assisted help for the ID sections, but not outright generations, I've highlighted some lines where it's a gray area between knowing what to do and syntax
 
 class World:
     def __init__(
@@ -23,6 +24,7 @@ class World:
         self._resolver: ContactResolver = resolver
 
     def _volume_for(self, body: RigidBody) -> BoundingSphere:
+        # I had to refer quite a bit for this section
         shapes = self._shapes.get(id(body))
         if not shapes:
             raise ValueError(f"Body {id(body)} has no registered shapes")
@@ -37,6 +39,9 @@ class World:
     def add_shape(self, body: RigidBody, shape: Primitive) -> None:
         self._shapes.setdefault(id(body), []).append(shape)
 
+    def get_shapes(self, body: RigidBody) -> list[Primitive]:
+        return list(self._shapes.get(id(body), []))
+
     def add_plane(self, plane: Plane) -> None:
         self._static_planes.append(plane)
 
@@ -49,7 +54,7 @@ class World:
         self._rb_registrations.remove(body)
         self._shapes.pop(id(body), None)
         self._force_registry.deregister_all_generators(body)
-        if self._broad_phase.contains(body):
+        if self._broad_phase.contains(body): # *!*
             leaf = self._broad_phase._body_to_leaf[id(body)]
             self._broad_phase.remove(leaf)
 
@@ -79,7 +84,7 @@ class World:
         for body in self._rb_registrations:
             if body.is_sleeping:
                 continue
-            body_shapes = self._shapes.get(id(body), [])
+            body_shapes = self._shapes.get(id(body), []) # *!*
             for shape in body_shapes:
                 for plane in self._static_planes:
                     e, mu = shape.material.mix(plane.material)

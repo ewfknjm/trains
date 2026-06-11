@@ -2,7 +2,7 @@ import numpy as np
 from .quaternions import Quaternion
 from .transform import Transform4x4
 
-INITIAL_SLEEP_MOTION = 0.3
+INITIAL_SLEEP_MOTION = 10.0
 
 
 class RigidBody:
@@ -121,6 +121,7 @@ class RigidBody:
         self.inverse_mass = 1.0 / value
 
     def add_force(self, force: np.ndarray):
+        self.set_awake()
         self.force_accum += force
 
     def add_torque(self, torque: np.ndarray):

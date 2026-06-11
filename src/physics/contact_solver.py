@@ -25,6 +25,7 @@ class PreparedContact:
     angular_b: Optional[np.ndarray]
     rxn_a_norm: float
     rxn_b_norm: float
+    initial_cv_n: float = 0.0
 
     @property
     def K(self) -> float:
@@ -54,6 +55,7 @@ class PreparedContact:
             m.body_b.omega -= self.angular_b @ impulse_vector
 
     def apply_position_change(self, depth: float):
+        # Mainly from Millington's book, thought, AI corrections were made for the lines tagged with this symbol - *!*
         PENETRATION_SLOP = 0.01
         depth -= PENETRATION_SLOP
 
@@ -68,17 +70,17 @@ class PreparedContact:
             return np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3)
 
         K_angular_a = self.k_a - m.body_a.inverse_mass
-        lin_a = depth * m.body_a.inverse_mass / self.K
-        ang_a = depth * K_angular_a / self.K
+        lin_a = depth * m.body_a.inverse_mass / self.K # *!*
+        ang_a = depth * K_angular_a / self.K # *!*
 
         _ra = self.relative_a
         limit = ANGULAR_LIMIT_CONSTANT * math.sqrt(
             _ra[0] * _ra[0] + _ra[1] * _ra[1] + _ra[2] * _ra[2]
         )
         if abs(ang_a) > limit:
-            total = lin_a + ang_a
-            ang_a = limit if ang_a >= 0 else -limit
-            lin_a = total - ang_a
+            total = lin_a + ang_a # *!*
+            ang_a = limit if ang_a >= 0 else -limit # *!*
+            lin_a = total - ang_a # *!*
 
         delta_pos_a = lin_a * n
         m.body_a.position += delta_pos_a
@@ -134,6 +136,7 @@ def skew(v: np.ndarray) -> np.ndarray:
 
 
 def prepare_contacts(data: ContactData) -> list[PreparedContact]:
+    # Some AI assisted corrections were done here, mainly to help with caching and to verify mathematical accuracy
     prepared = []
     for manifold in data.manifolds.values():
         for c in manifold.contacts.values():
@@ -255,6 +258,10 @@ class ContactResolver:
         WARM_FACTOR = 0.95
 
         for pc in prepared_list:
+            cv = pc.contact_velocity()
+            pc.initial_cv_n = cv[0]
+
+        for pc in prepared_list:
             c = pc.contact
             impulse_contact = np.array(
                 [
@@ -322,8 +329,8 @@ class ContactResolver:
                 cv_n += friction_induced
 
                 bounce = 0.0
-                if cv_n < -1.0:
-                    bounce = -m.restitution * cv_n
+                if pc.initial_cv_n < -0.25:
+                    bounce = -m.restitution * pc.initial_cv_n - cv_n
 
                 impulse_n = (-cv_n + bounce) / Y[0, 0]
                 old_impulse = c.normal_impulse

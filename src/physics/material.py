@@ -9,14 +9,15 @@ class PhysicsMaterial:
     friction: float
 
     def mix(self, other: PhysicsMaterial) -> tuple[float, float]:
-        restitution = min(self.restitution, other.restitution)
-        friction = math.sqrt(self.friction * other.friction)
+        restitution = max(self.restitution, other.restitution)
+        friction = math.sqrt(self.friction * other.friction) # *!* Concerned about how to treat friction, asked, then chose this approach
         return restitution, friction
 
 
+# AI generated values and common types
 class Materials:
     DEFAULT = PhysicsMaterial(restitution=0.5, friction=0.5)
     STEEL = PhysicsMaterial(restitution=0.2, friction=0.3)
-    RUBBER = PhysicsMaterial(restitution=0.7, friction=0.8)
+    RUBBER = PhysicsMaterial(restitution=0.8, friction=0.8)
     WOOD = PhysicsMaterial(restitution=0.3, friction=0.5)
     CONCRETE = PhysicsMaterial(restitution=0.1, friction=0.7)

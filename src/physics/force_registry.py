@@ -18,7 +18,7 @@ class _RegistrationKey(NamedTuple):
 class ForceRegistry:
     def __init__(self):
         self._registrations: list[ForceRegistrant] = []
-        self._key_set: set[_RegistrationKey] = set()
+        self._key_set: set[_RegistrationKey] = set() # AI project-wide audit revealed possibility of duplicated pairs
 
     def _key(self, body: RigidBody, generator: ForceGenerator) -> _RegistrationKey:
         return _RegistrationKey(id(body), id(generator))
@@ -51,7 +51,7 @@ class ForceRegistry:
             for r in self._registrations
             if r.body is body
         ]
-        self._registrations = [r for r in self._registrations if r.body is not r.body]
+        self._registrations = [r for r in self._registrations if r.body is not body]
 
         for key in to_remove:
             self._key_set.discard(key)
