@@ -93,16 +93,15 @@ class Sphere(Primitive):
         )
 
         current = Contact(
-            local_point_a=local_a,
-            local_point_b=local_b,
-            world_point=contact_point,
-            world_normal=contact_normal,
-            penetration=float(penetration),
-            feature_id=None,
+            local_a,
+            local_b,
+            contact_point,
+            contact_normal,
+            float(penetration),
+            None,
         )
         manifold = data.get_manifold(self.body, sphere.body, restitution, friction)
         manifold.add_contact(current)
-        data.contacts.append(current)
 
     def collide_with_box(
         self, box: Box, data: ContactData, restitution: float, friction: float
@@ -130,16 +129,15 @@ class Sphere(Primitive):
             surface_of_half_space - self.body.position
         )
         current = Contact(
-            local_point_a=local_a,
-            local_point_b=None,
-            world_point=surface_of_half_space,
-            world_normal=plane.normal,
-            penetration=float(-distance),
-            feature_id=None,
+            local_a,
+            None,
+            surface_of_half_space,
+            plane.normal,
+            float(-distance),
+            None,
         )
         manifold = data.get_manifold(self.body, None, restitution, friction)
         manifold.add_contact(current)
-        data.contacts.append(current)
 
     def bounding_sphere(self) -> BoundingSphere:
         return BoundingSphere(radius=self.radius, center=self.get_axis(3).copy())
@@ -247,16 +245,15 @@ class Box(Primitive):
             world_closest_pt - sphere.body.position
         )
         current = Contact(
-            local_point_a=local_a,
-            local_point_b=local_b,
-            world_point=world_closest_pt,
-            world_normal=normal,
-            penetration=penetration,
-            feature_id=None,
+            local_a,
+            local_b,
+            world_closest_pt,
+            normal,
+            penetration,
+            None,
         )
         manifold = data.get_manifold(self.body, sphere.body, restitution, friction)
         manifold.add_contact(current)
-        data.contacts.append(current)
 
     def collide_with_box(
         self, box: Box, data: ContactData, restitution: float, friction: float
@@ -439,16 +436,15 @@ class Box(Primitive):
         )
         feature_id = FeatureID(axis_one=axis_one_index, axis_two=axis_two_index)
         current = Contact(
-            local_point_a=local_a,
-            local_point_b=local_b,
-            world_point=contact_point,
-            world_normal=normal,
-            penetration=penetration,
-            feature_id=feature_id,
+            local_a,
+            local_b,
+            contact_point,
+            normal,
+            penetration,
+            feature_id,
         )
         manifold = data.get_manifold(self.body, box.body, restitution, friction)
         manifold.add_contact(current)
-        data.contacts.append(current)
 
     def collide_with_plane(
         self, plane: Plane, data: ContactData, restitution: float, friction: float
@@ -499,15 +495,15 @@ class Box(Primitive):
             )
             f_id = FeatureID(incident_vertex_index=int(v_idx))
             current = Contact(
-                local_point_a=local_a,
-                local_point_b=None,
-                world_point=world_position,
-                world_normal=normal,
-                penetration=penetration,
-                feature_id=f_id,
+                local_a,
+                None,
+                world_position,
+                normal,
+                penetration,
+                f_id,
             )
             manifold.add_contact(current)
-            data.contacts.append(current)
+
 
     def bounding_sphere(self) -> BoundingSphere:
         if self._half_size is None:
@@ -547,7 +543,7 @@ class Sutherland_Hodgman:
 
         clip_vertices = []
         for i in range(4):
-            feature_id = FeatureID(incident_vertex_index=int(ordered_indices[i]))
+            feature_id = FeatureID(int(ordered_indices[i]))
             clip_vertices.append(ClipVertex(world_vertices[i], feature_id))
 
         return clip_vertices
@@ -669,15 +665,15 @@ class Sutherland_Hodgman:
             )
 
             current = Contact(
-                local_point_a=local_a,
-                local_point_b=local_b,
-                world_point=polygon.world_position,
-                world_normal=final_contact_normal,
-                penetration=penetration,
-                feature_id=polygon.feature_id,
+                local_a,
+                local_b,
+                polygon.world_position,
+                final_contact_normal,
+                penetration,
+                polygon.feature_id,
             )
             manifold.add_contact(current)
-            data.contacts.append(current)
+
 
     @staticmethod
     def _clip_polygon_against_plane(

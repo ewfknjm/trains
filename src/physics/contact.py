@@ -88,7 +88,6 @@ class ContactManifold:
 class ContactData:
     max_contacts: int
     manifolds: dict[tuple[int, int], ContactManifold] = field(default_factory=dict)
-    contacts: list[Contact] = field(default_factory=list)
 
     @property
     def contact_count(self) -> int:
@@ -117,7 +116,17 @@ class ContactData:
             self.manifolds[pair].friction = friction
         return self.manifolds[pair]
 
+    def merge_from(self, old: "ContactData") -> None:
+        for pair_key, manifold in self.manifolds.items():
+            old_manifold = old.manifolds.get(pair_key)
+            if old_manifold is None:
+                continue
+            for fid, contact in manifold.contacts.items():
+                old_contact = old_manifold.contacts.get(fid)
+                if old_contact is not None:
+                    contact.normal_impulse = old_contact.normal_impulse
+                    contact.tangent_impulse_1 = old_contact.tangent_impulse_1
+                    contact.tangent_impulse_2 = old_contact.tangent_impulse_2
+
     def clear(self):
-        self.contacts.clear()
-        for manifold in list(self.manifolds.values()):
-            manifold.contacts.clear()
+        self.manifolds.clear()

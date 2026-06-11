@@ -99,7 +99,13 @@ class World:
         self.integrate(dt)
         self._broad_phase_update()
         pairs = self._broad_phase.get_candidate_pairs()
-        self._contact_data.clear()
+
+        new_data = ContactData(max_contacts=self._contact_data.max_contacts)
+        old_data = self._contact_data
+        self._contact_data = new_data
+
         self._narrow_phase_pass(pairs)
         self._static_narrow_phase_pass()
-        self._resolver.resolve(self._contact_data, dt)
+
+        new_data.merge_from(old_data)
+        self._resolver.resolve(new_data, dt)

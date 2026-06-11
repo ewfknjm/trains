@@ -92,13 +92,9 @@ class BSHTree(BroadPhase):
         pairs: list[CandidatePair],
         usage: list[int],
     ) -> None:
-        """Collect all overlapping pairs by checking each internal node's children
-        against each other *and* recursing into each subtree for intra-subtree pairs."""
         if node.body is not None or node.left is None or node.right is None:
             return
-        # Cross-pairs between the two child subtrees
         self._get_overlaps_with(node.left, node.right, pairs, usage)
-        # Intra-subtree pairs on each side
         self._get_all_overlaps(node.left, pairs, usage)
         self._get_all_overlaps(node.right, pairs, usage)
 

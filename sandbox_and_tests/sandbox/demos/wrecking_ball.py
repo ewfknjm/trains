@@ -35,8 +35,8 @@ SPRING_K = 80.0
 
 theta = math.radians(50)
 START = [
-    ANCHOR[0] + NATURAL_LEN * math.sin(theta), 
-    ANCHOR[1] - NATURAL_LEN * math.cos(theta),  
+    ANCHOR[0] + NATURAL_LEN * math.sin(theta),
+    ANCHOR[1] - NATURAL_LEN * math.cos(theta),
     0.0,
 ]
 
@@ -46,10 +46,8 @@ ball_body, ball_shape = renderer.add_sphere(
     mass=6.0,
     body_color=color.orange,
 )
-ball_shape.material = Materials.RUBBER  
-ball_body.can_sleep = (
-    False 
-)
+ball_shape.material = Materials.RUBBER
+ball_body.can_sleep = False
 
 renderer._world.add_force_generators(
     ball_body,

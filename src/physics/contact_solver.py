@@ -2,11 +2,9 @@ from dataclasses import dataclass
 from typing import Optional
 import numpy as np
 from .contact import Contact, ContactManifold, ContactData, get_contact_basis
-from .rigidbody import RigidBody
 import math
 
 ANGULAR_LIMIT_CONSTANT = 0.05
-STATIC_FRICTION_RATIO = 1.2
 
 
 @dataclass
@@ -22,7 +20,6 @@ class PreparedContact:
     k_b: float
 
     contact_basis: Optional[np.ndarray]
-    impulse_matrix: np.ndarray
     inverse_mass_matrix: np.ndarray
     angular_a: np.ndarray
     angular_b: Optional[np.ndarray]
@@ -125,14 +122,6 @@ class PreparedContact:
         return delta_rot_a, delta_rot_b, delta_pos_a, delta_pos_b
 
 
-def _inertia_contribution(
-    body: RigidBody, r: np.ndarray, contact_normal: np.ndarray
-) -> tuple[float, np.ndarray]:
-    rxn = np.cross(r, contact_normal)
-    K = float(body.inverse_mass + rxn @ (body.inverse_inertia_tensor_world @ rxn))
-    return K, rxn
-
-
 def skew(v: np.ndarray) -> np.ndarray:
     vx, vy, vz = v
     return np.array(
@@ -150,34 +139,33 @@ def prepare_contacts(data: ContactData) -> list[PreparedContact]:
         for c in manifold.contacts.values():
             n = c.world_normal
             r_a = c.world_point - manifold.body_a.position
-            K_a, rxn_a = _inertia_contribution(manifold.body_a, r_a, n)
-            rxn_a_norm = math.sqrt(float(rxn_a @ rxn_a))
+            rxn_a = np.cross(r_a, n)
+            rxn_a_norm = np.linalg.norm(rxn_a)
             skewed_a = skew(r_a)
             I_inv_a = manifold.body_a.inverse_inertia_tensor_world
             Z = -skewed_a @ I_inv_a @ skewed_a
             angular_a = I_inv_a @ skewed_a
-            inverse_mass = manifold.body_a.inverse_mass
 
-            r_b, rxn_b, K_b = None, None, 0.0
+            contact_basis = get_contact_basis(n)
+            r_b, rxn_b, X = None, None, np.zeros((3, 3))
             angular_b: Optional[np.ndarray] = None
             rxn_b_norm = 0.0
             if manifold.body_b:
                 r_b = c.world_point - manifold.body_b.position
-                K_b, rxn_b = _inertia_contribution(manifold.body_b, r_b, n)
-                rxn_b_norm = math.sqrt(float(rxn_b @ rxn_b))
+                rxn_b = np.cross(r_b, n)
+                rxn_b_norm = np.linalg.norm(rxn_b)
                 skewed_b = skew(r_b)
                 I_inv_b = manifold.body_b.inverse_inertia_tensor_world
-                Z += -skewed_b @ I_inv_b @ skewed_b
+                X = -skewed_b @ I_inv_b @ skewed_b
                 angular_b = I_inv_b @ skewed_b
-                inverse_mass += manifold.body_b.inverse_mass
+                X = (contact_basis.T @ X @ contact_basis) + (
+                    np.eye(3) * manifold.body_b.inverse_mass
+                )
 
-            contact_basis = get_contact_basis(n)
-            Y = contact_basis.T @ Z @ contact_basis
-            Y += np.eye(3) * inverse_mass
-            try:
-                impulse_matrix = np.linalg.inv(Y)
-            except np.linalg.LinAlgError:
-                impulse_matrix = np.zeros((3, 3))
+            Z = (contact_basis.T @ Z @ contact_basis) + (
+                np.eye(3) * manifold.body_a.inverse_mass
+            )
+            Y = Z + X
 
             prepared.append(
                 PreparedContact(
@@ -185,17 +173,16 @@ def prepare_contacts(data: ContactData) -> list[PreparedContact]:
                     c,
                     r_a,
                     rxn_a,
-                    K_a,
+                    Z[0, 0],
                     r_b,
                     rxn_b,
-                    K_b,
+                    X[0, 0],
                     contact_basis,
-                    impulse_matrix,
                     Y,
                     angular_a,
                     angular_b,
-                    rxn_a_norm,
-                    rxn_b_norm,
+                    float(rxn_a_norm),
+                    float(rxn_b_norm),
                 )
             )
     return prepared
@@ -265,88 +252,83 @@ class ContactResolver:
                     oc.penetration += float(displacement @ n)
 
     def _resolve_velocities(self, prepared_list: list[PreparedContact], dt: float):
-        cv_cache = [pc.contact_velocity() for pc in prepared_list]
-        body_contacts: dict[int, list[int]] = {}
-        for i, pc in enumerate(prepared_list):
-            body_contacts.setdefault(id(pc.manifold.body_a), []).append(i)
-            if pc.manifold.body_b is not None:
-                body_contacts.setdefault(id(pc.manifold.body_b), []).append(i)
+        WARM_FACTOR = 0.95
+
+        for pc in prepared_list:
+            c = pc.contact
+            impulse_contact = np.array(
+                [
+                    c.normal_impulse * WARM_FACTOR,
+                    c.tangent_impulse_1 * WARM_FACTOR,
+                    c.tangent_impulse_2 * WARM_FACTOR,
+                ]
+            )
+            c.normal_impulse *= WARM_FACTOR
+            c.tangent_impulse_1 *= WARM_FACTOR
+            c.tangent_impulse_2 *= WARM_FACTOR
+
+            impulse_world = pc.contact_basis @ impulse_contact
+            pc.apply_velocity_change(impulse_world)
 
         for _ in range(self.velocity_iterations):
-            worst_contact_velocity = 0.0
-            worst_idx = -1
+            for pc in prepared_list:
+                if pc.contact_basis is None:
+                    raise ValueError("prepare contacts first")
 
-            for i, cv in enumerate(cv_cache):
-                if cv[0] < worst_contact_velocity:
-                    worst_contact_velocity = cv[0]
-                    worst_idx = i
+                c = pc.contact
+                m = pc.manifold
+                r0, r1, r2 = pc.relative_a
+                w0, w1, w2 = m.body_a.omega
 
-            if worst_idx == -1:
-                break
+                cv = [
+                    (w1 * r2 - w2 * r1) + m.body_a.velocity[0],
+                    (w2 * r0 - w0 * r2) + m.body_a.velocity[1],
+                    (w0 * r1 - w1 * r0) + m.body_a.velocity[2],
+                ]
 
-            worst_contact = prepared_list[worst_idx]
-            worst_cv = cv_cache[worst_idx]
+                if m.body_b and pc.relative_b is not None:
+                    r0, r1, r2 = pc.relative_b
+                    w0, w1, w2 = m.body_b.omega
 
-            K = worst_contact.K
-            if K < 1e-8:
-                continue
+                    cv[0] -= (w1 * r2 - w2 * r1) + m.body_b.velocity[0]
+                    cv[1] -= (w2 * r0 - w0 * r2) + m.body_b.velocity[1]
+                    cv[2] -= (w0 * r1 - w1 * r0) + m.body_b.velocity[2]
 
-            m = worst_contact.manifold
-            e = m.restitution
-            mu = m.friction
-            STATIC_FRICTION = mu * STATIC_FRICTION_RATIO
-            DYNAMIC_FRICTION = mu
+                P = pc.contact_basis
+                cv_n = P[0, 0] * cv[0] + P[1, 0] * cv[1] + P[2, 0] * cv[2]
+                cv_1 = P[0, 1] * cv[0] + P[1, 1] * cv[1] + P[2, 1] * cv[2]
+                cv_2 = P[0, 2] * cv[0] + P[1, 2] * cv[1] + P[2, 2] * cv[2]
 
-            a_acceleration = m.body_a.last_frame_acceleration
-            b_acceleration = (
-                m.body_b.last_frame_acceleration if m.body_b else np.zeros(3)
-            )
-
-            if worst_contact.contact_basis is None:
-                raise ValueError("prepare contacts first")
-
-            accel_velocity = (a_acceleration - b_acceleration) * dt
-            accel_contact = worst_contact.contact_basis.T @ accel_velocity
-            accel_build_up = accel_contact[0]
-
-            bounce_velocity = -e * worst_contact_velocity
-            if accel_build_up < 0.0:
-                bounce_velocity += e * accel_build_up
-                bounce_velocity = 0.0 if bounce_velocity < 0.0 else bounce_velocity
-
-            desired_velocity_change = bounce_velocity - worst_contact_velocity
-            target_velocity = np.array(
-                [desired_velocity_change, -worst_cv[1], -worst_cv[2]]
-            )
-
-            impulse_contact = worst_contact.impulse_matrix @ target_velocity
-            planar_impulse = math.hypot(impulse_contact[1], impulse_contact[2])
-
-            if planar_impulse > impulse_contact[0] * STATIC_FRICTION:
-                if planar_impulse > 1e-8:
-                    impulse_contact[1] /= planar_impulse
-                    impulse_contact[2] /= planar_impulse
-
-                delta_velocity = worst_contact.inverse_mass_matrix[0, :]
-                denominator = (
-                    delta_velocity[0]
-                    + delta_velocity[1] * DYNAMIC_FRICTION * impulse_contact[1]
-                    + delta_velocity[2] * DYNAMIC_FRICTION * impulse_contact[2]
+                Y = pc.inverse_mass_matrix
+                impulse_1 = -cv_1 / Y[1, 1]
+                old_impulse = c.tangent_impulse_1
+                max_friction = m.friction * c.normal_impulse
+                c.tangent_impulse_1 = max(
+                    -max_friction, min(max_friction, old_impulse + impulse_1)
                 )
+                impulse_1 = c.tangent_impulse_1 - old_impulse
 
-                if denominator <= 1e-8:
-                    continue
+                impulse_2 = -cv_2 / Y[2, 2]
+                old_impulse = c.tangent_impulse_2
+                c.tangent_impulse_2 = max(
+                    -max_friction, min(max_friction, old_impulse + impulse_2)
+                )
+                impulse_2 = c.tangent_impulse_2 - old_impulse
 
-                impulse_contact[0] = desired_velocity_change / denominator
-                impulse_contact[1] *= DYNAMIC_FRICTION * impulse_contact[0]
-                impulse_contact[2] *= DYNAMIC_FRICTION * impulse_contact[0]
+                friction_contact = np.array([0.0, impulse_1, impulse_2])
+                pc.apply_velocity_change(P @ friction_contact)
 
-            impulse_world = worst_contact.contact_basis @ impulse_contact
-            worst_contact.apply_velocity_change(impulse_world)
+                friction_induced = Y[0, 1] * impulse_1 + Y[0, 2] * impulse_2
+                cv_n += friction_induced
 
-            body_a, body_b = m.body_a, m.body_b
-            to_update: set[int] = set(body_contacts.get(id(body_a), []))
-            if body_b is not None:
-                to_update.update(body_contacts.get(id(body_b), []))
-            for i in to_update:
-                cv_cache[i] = prepared_list[i].contact_velocity()
+                bounce = 0.0
+                if cv_n < -1.0:
+                    bounce = -m.restitution * cv_n
+
+                impulse_n = (-cv_n + bounce) / Y[0, 0]
+                old_impulse = c.normal_impulse
+                c.normal_impulse = max(0.0, old_impulse + impulse_n)
+                impulse_n = c.normal_impulse - old_impulse
+
+                normal_contact = np.array([impulse_n, 0.0, 0.0])
+                pc.apply_velocity_change(P @ normal_contact)
