@@ -11,10 +11,10 @@ from panda3d.core import Quat
 import random
 import math
 
-NUM_BOXES = 29
+NUM_BOXES = 20
 BOX_HALF = 0.5
 RADIUS = 0.5
-USE_SPHERES = False
+USE_SPHERES = True
 BOX_MATERIAL = Materials.RUBBER
 COLOURS = [
     color.cyan,
@@ -48,6 +48,8 @@ buoyancy = BuoyancyFactors(
     liquid_density=_liquid_density,
 )
 
+START_HEIGHT = 10
+
 
 def main():
     global chopin
@@ -59,7 +61,7 @@ def main():
     for i in range(NUM_BOXES):
         color = random.choice(COLOURS)
 
-        y = size + i * size * 2
+        y = START_HEIGHT + size + i * size * 2
         rb = RigidBody(0.0, y, 0.0)
         rb.mass = BODY_MASS
         if USE_SPHERES:

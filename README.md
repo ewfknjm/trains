@@ -6,7 +6,7 @@ This project is for the final project of Harvard University's CS50x Introduction
 It's a simple physics engine with one working demo. Albeit, it has the components to produce other demos. The demo provided is showcases some basic features of the engine - forces, contacts and shapes.
 
 The engine itself is heavily taken from Ian Millington's book *Game Physics Engine Development*, but does incorporate my own interpretation of some ideas.
-> Watch the demo [here](url)
+> Watch the demo [here](https://youtu.be/Hh4ZnpWwukk)
 
 ---
 

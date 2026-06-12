@@ -330,7 +330,7 @@ class ContactResolver:
 
                 bounce = 0.0
                 if pc.initial_cv_n < -0.25:
-                    bounce = -m.restitution * pc.initial_cv_n - cv_n
+                    bounce = -m.restitution * pc.initial_cv_n
 
                 impulse_n = (-cv_n + bounce) / Y[0, 0]
                 old_impulse = c.normal_impulse
