@@ -70,17 +70,17 @@ class PreparedContact:
             return np.zeros(3), np.zeros(3), np.zeros(3), np.zeros(3)
 
         K_angular_a = self.k_a - m.body_a.inverse_mass
-        lin_a = depth * m.body_a.inverse_mass / self.K # *!*
-        ang_a = depth * K_angular_a / self.K # *!*
+        lin_a = depth * m.body_a.inverse_mass / self.K  # *!*
+        ang_a = depth * K_angular_a / self.K  # *!*
 
         _ra = self.relative_a
         limit = ANGULAR_LIMIT_CONSTANT * math.sqrt(
             _ra[0] * _ra[0] + _ra[1] * _ra[1] + _ra[2] * _ra[2]
         )
         if abs(ang_a) > limit:
-            total = lin_a + ang_a # *!*
-            ang_a = limit if ang_a >= 0 else -limit # *!*
-            lin_a = total - ang_a # *!*
+            total = lin_a + ang_a  # *!*
+            ang_a = limit if ang_a >= 0 else -limit  # *!*
+            lin_a = total - ang_a  # *!*
 
         delta_pos_a = lin_a * n
         m.body_a.position += delta_pos_a
@@ -330,7 +330,7 @@ class ContactResolver:
 
                 bounce = 0.0
                 if pc.initial_cv_n < -0.25:
-                    bounce = -m.restitution * pc.initial_cv_n
+                    bounce = -m.restitution * pc.initial_cv_n  # audit here
 
                 impulse_n = (-cv_n + bounce) / Y[0, 0]
                 old_impulse = c.normal_impulse
